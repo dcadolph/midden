@@ -1,0 +1,18 @@
+# Binaries
+/midden
+/midden.exe
+bin/
+dist/
+
+# Test / coverage output
+*.test
+*.out
+coverage.*
+profile.*
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
