@@ -68,7 +68,29 @@ midden weekly --offset 1                     Digest the prior week.
 midden import path/to/note.md --tag inbox    Append a file as one entry on today.
 midden import - --date 2026-06-10            Read stdin and file it on a chosen date.
 midden report html -o report.html            Render an HTML report (dark mode aware).
+midden audio                                 Record a voice memo and append it to today.
+midden audio --duration 30s --transcribe     Record for 30s then transcribe with OpenAI Whisper.
+midden ingest ics calendar.ics               Append calendar events from an .ics export.
+midden reindex                               Build the embedding index used by recall.
+midden recall "token rotation strategy"      Semantic search over indexed entries.
+midden chat "when did I last see Mom?"       Ask an LLM a question using recalled entries as evidence.
 ```
+
+## LLM and audio integrations
+
+Recall, chat, reindex, and Whisper transcription call external models. Each provider is selected from environment variables; midden never sends anything until you opt in by setting one.
+
+| Action | Variables (first match wins) |
+|---|---|
+| Embeddings | `VOYAGE_API_KEY` → `OPENAI_API_KEY` → local Ollama at `OLLAMA_HOST`. Force with `MIDDEN_EMBED_PROVIDER`. |
+| Chat | `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → local Ollama. Force with `MIDDEN_CHAT_PROVIDER`. |
+| Transcription | `OPENAI_API_KEY` (Whisper). |
+
+Model overrides: `OPENAI_EMBED_MODEL`, `VOYAGE_EMBED_MODEL`, `OLLAMA_EMBED_MODEL`, `ANTHROPIC_MODEL`, `OPENAI_CHAT_MODEL`, `OLLAMA_CHAT_MODEL`.
+
+Run `midden reindex` after major writes to keep the embedding index fresh. The index file lives at `<vault>/.midden.index.json`.
+
+Audio capture uses the first available recorder in this order: `sox`, `rec`, `ffmpeg` (avfoundation on macOS, alsa on Linux, dshow on Windows). Recorded WAVs land in `<vault>/audio/YYYY/MM/DD/HH-MM-SS.wav` and the day file gains a linking entry.
 
 ## Configuration
 

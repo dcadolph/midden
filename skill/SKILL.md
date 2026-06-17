@@ -76,6 +76,11 @@ Map the user's question to the smallest matching command:
 | Summarize the last seven days | `midden weekly` (use `--offset N` for prior weeks) |
 | Import a markdown file as an entry | `midden import path/to/file.md --tag inbox` (or `-` to read from stdin) |
 | Render an HTML report | `midden report html -o ~/midden-report.html` |
+| Semantic search ("anything about token rotation") | `midden recall "token rotation"` (requires a prior `midden reindex`) |
+| Synthesize an answer from journal evidence | `midden chat "when did I last see Mom"` |
+| Rebuild the embedding index | `midden reindex` |
+| Capture a voice memo (optionally transcribed) | `midden audio --duration 30s --transcribe` |
+| Ingest an .ics calendar export | `midden ingest ics ~/Downloads/cal.ics --from today --to today` |
 
 Pass `--json` to any of the read commands to receive structured output you can
 parse without regex.
@@ -98,6 +103,18 @@ read and write requires the passphrase. Resolve it in this order:
 
 Do not pass passphrases on the command line via `--passphrase` because the
 argument list is visible to other processes.
+
+## LLM-backed recall and chat
+
+`midden recall "<query>"` performs a semantic search via the embedding index;
+`midden chat "<question>"` adds an LLM synthesis step that quotes journal entries
+as evidence. Both require a prior `midden reindex` and at least one provider
+configured through environment variables (`VOYAGE_API_KEY`, `OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY`, or local Ollama).
+
+Prefer `midden recall` when the user wants to find entries.
+Prefer `midden chat` when the user wants a narrated answer that cites entries.
+If recall returns nothing useful, fall back to `midden search` over the raw text.
 
 ## Backups
 
