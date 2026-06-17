@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"golang.org/x/term"
+
+	"github.com/dcadolph/midden/internal/keyring"
 )
 
 // EnvPassphrase is the environment variable that supplies the vault passphrase
@@ -21,14 +23,21 @@ const EnvPassphrase = "MIDDEN_PASSPHRASE"
 var passphraseFlag string
 
 // resolvePassphrase returns the vault passphrase using the documented precedence:
-// the --passphrase flag, MIDDEN_PASSPHRASE, then an interactive prompt against
-// the controlling terminal.
+// the --passphrase flag, MIDDEN_PASSPHRASE, the OS keychain when enabled in
+// config, then an interactive prompt against the controlling terminal.
 func resolvePassphrase(prompt string) (string, error) {
 	if passphraseFlag != "" {
 		return passphraseFlag, nil
 	}
 	if env := os.Getenv(EnvPassphrase); env != "" {
 		return env, nil
+	}
+	if keychainEnabled() {
+		if pass, err := keyring.GetVaultPassphrase(); err == nil {
+			return pass, nil
+		} else if !errors.Is(err, keyring.ErrNotFound) {
+			return "", fmt.Errorf("read keychain: %w", err)
+		}
 	}
 	return readPassphraseFromTerminal(prompt)
 }

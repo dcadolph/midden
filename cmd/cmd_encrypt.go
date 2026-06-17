@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/dcadolph/midden/internal/keyring"
 	"github.com/dcadolph/midden/internal/vault"
 )
 
@@ -44,11 +46,27 @@ var encryptVerifyCmd = &cobra.Command{
 	RunE:  runEncryptVerify,
 }
 
+// encryptStoreCmd writes the vault passphrase to the OS keychain.
+var encryptStoreCmd = &cobra.Command{
+	Use:   "store",
+	Short: "Store the vault passphrase in the OS keychain.",
+	RunE:  runEncryptStore,
+}
+
+// encryptForgetCmd removes the stored passphrase from the OS keychain.
+var encryptForgetCmd = &cobra.Command{
+	Use:   "forget",
+	Short: "Remove the stored passphrase from the OS keychain.",
+	RunE:  runEncryptForget,
+}
+
 func init() {
 	encryptCmd.AddCommand(encryptStatusCmd)
 	encryptCmd.AddCommand(encryptEnableCmd)
 	encryptCmd.AddCommand(encryptDisableCmd)
 	encryptCmd.AddCommand(encryptVerifyCmd)
+	encryptCmd.AddCommand(encryptStoreCmd)
+	encryptCmd.AddCommand(encryptForgetCmd)
 	rootCmd.AddCommand(encryptCmd)
 }
 
@@ -162,6 +180,52 @@ func runEncryptVerify(cmd *cobra.Command, _ []string) error {
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "ok")
 	return nil
+}
+
+// runEncryptStore reads the passphrase and stores it in the OS keychain.
+// The passphrase is verified against the newest day file when one exists so a
+// typo cannot silently land in the keychain.
+func runEncryptStore(cmd *cobra.Command, _ []string) error {
+	v, err := openVaultRaw()
+	if err != nil {
+		return err
+	}
+	if !v.IsEncrypted() {
+		return fmt.Errorf("vault is not encrypted: run `midden encrypt enable` first")
+	}
+	pass, err := resolvePassphrase("Vault passphrase: ")
+	if err != nil {
+		return err
+	}
+	latest := latestStoredDate(v)
+	if !latest.IsZero() {
+		if _, err := v.WithPassphrase(pass).ReadDay(latest); err != nil {
+			return errors.Join(ErrVault, fmt.Errorf("verify passphrase before storing: %w", err))
+		}
+	}
+	if err := keyring.SetVaultPassphrase(pass); err != nil {
+		return errors.Join(ErrVault, err)
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "Stored passphrase in keychain. Set `keychain: true` in your config to use it automatically.")
+	return nil
+}
+
+// runEncryptForget removes the stored passphrase from the OS keychain.
+func runEncryptForget(cmd *cobra.Command, _ []string) error {
+	if err := keyring.DeleteVaultPassphrase(); err != nil {
+		return errors.Join(ErrVault, err)
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "Removed stored passphrase from keychain.")
+	return nil
+}
+
+// latestStoredDate returns the most recent date with a day file in the vault, or the zero time when empty.
+func latestStoredDate(v *vault.Vault) time.Time {
+	days, err := v.ListDays()
+	if err != nil || len(days) == 0 {
+		return time.Time{}
+	}
+	return days[len(days)-1]
 }
 
 // dayFilePaths returns the absolute paths of every YYYY/MM/DD.md file under the vault.

@@ -7,11 +7,11 @@ import (
 	"github.com/dcadolph/midden/internal/vault"
 )
 
-// openVault returns the vault rooted at the directory chosen by the root flag.
+// openVault returns the vault rooted at the directory chosen by the flag, config, or default.
 // Encrypted vaults are unlocked using the resolved passphrase before the handle
 // is returned so downstream commands do not need to repeat the unlock dance.
 func openVault() (*vault.Vault, error) {
-	v, err := vault.Open(vaultDir)
+	v, err := vault.Open(resolveVaultDir())
 	if err != nil {
 		return nil, errors.Join(ErrVault, fmt.Errorf("open vault: %w", err))
 	}
@@ -29,7 +29,7 @@ func openVault() (*vault.Vault, error) {
 // Use it from encrypt subcommands that need to inspect or rewrite the marker
 // state without prompting for a passphrase up front.
 func openVaultRaw() (*vault.Vault, error) {
-	v, err := vault.Open(vaultDir)
+	v, err := vault.Open(resolveVaultDir())
 	if err != nil {
 		return nil, errors.Join(ErrVault, fmt.Errorf("open vault: %w", err))
 	}

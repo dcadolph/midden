@@ -58,7 +58,29 @@ midden export -f md                          Dump every entry as concatenated ma
 midden undo                                  Remove the most recent entry written.
 midden version                               Print the build version.
 midden completion bash                       Emit a shell completion script.
+midden config path                           Print the resolved config file path.
+midden config show                           Print the loaded configuration.
+midden git init                              Initialize the vault as a git repository.
+midden git status                            Print the vault git status.
+midden git sync                              Stage, commit, and push to origin if configured.
 ```
+
+## Configuration
+
+Optional YAML at `$MIDDEN_CONFIG`, falling back to `$XDG_CONFIG_HOME/midden/config.yaml` or `~/.config/midden/config.yaml`.
+
+```yaml
+default_tags:
+  - work
+editor: nvim
+keychain: true
+vault: /Users/you/midden
+```
+
+- `default_tags` are unused yet; future `midden add` will seed every entry with them.
+- `editor` takes precedence over the editor env vars.
+- `keychain: true` enables OS keychain lookup before the interactive passphrase prompt.
+- `vault` overrides the default vault directory (the `--vault` flag and `$MIDDEN_HOME` still beat it).
 
 Global flags:
 
@@ -86,7 +108,15 @@ Passphrase resolution for any command, in order:
 
 1. `--passphrase` flag (discouraged; visible to ps).
 2. `MIDDEN_PASSPHRASE` environment variable.
-3. Interactive prompt read from `/dev/tty` with no echo.
+3. OS keychain when `keychain: true` is set in the config.
+4. Interactive prompt read from `/dev/tty` with no echo.
+
+The keychain backend is the system Keychain on macOS, Secret Service or KWallet on Linux, and Credential Manager on Windows. Store and forget with:
+
+```
+midden encrypt store         Save the passphrase to the OS keychain.
+midden encrypt forget        Remove the stored passphrase from the keychain.
+```
 
 Encrypted vaults read-decrypt-append-encrypt the relevant day file inside an
 advisory lock so concurrent writers can never interleave bytes. Plaintext

@@ -88,11 +88,21 @@ If the vault is encrypted (`midden encrypt status` prints `encrypted`), every
 read and write requires the passphrase. Resolve it in this order:
 
 1. `MIDDEN_PASSPHRASE` environment variable already exported in the user's shell.
-2. Ask the user for the passphrase yourself and pass it via the same environment
+2. The OS keychain when the user has run `midden encrypt store` and set
+   `keychain: true` in `~/.config/midden/config.yaml`.
+3. Ask the user for the passphrase yourself and pass it via the same environment
    variable for the lifetime of the call. Never log or echo it.
 
 Do not pass passphrases on the command line via `--passphrase` because the
 argument list is visible to other processes.
+
+## Backups
+
+When the user asks to back up, sync, or version their vault, prefer
+`midden git sync` over reaching into the vault directory directly. It will
+stage, commit, and push to origin when a remote is configured. Use
+`midden git init` to set up a fresh vault repository and `midden git status`
+to report uncommitted changes.
 
 ## Output handling
 
