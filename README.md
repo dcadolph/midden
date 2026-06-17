@@ -63,6 +63,11 @@ midden config show                           Print the loaded configuration.
 midden git init                              Initialize the vault as a git repository.
 midden git status                            Print the vault git status.
 midden git sync                              Stage, commit, and push to origin if configured.
+midden weekly                                Print a 7-day digest grouped by day.
+midden weekly --offset 1                     Digest the prior week.
+midden import path/to/note.md --tag inbox    Append a file as one entry on today.
+midden import - --date 2026-06-10            Read stdin and file it on a chosen date.
+midden report html -o report.html            Render an HTML report (dark mode aware).
 ```
 
 ## Configuration

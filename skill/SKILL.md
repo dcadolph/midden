@@ -73,6 +73,9 @@ Map the user's question to the smallest matching command:
 | Dump entries for migration or analysis | `midden export -f json` (or `jsonl`/`md`) |
 | Edit a day in the editor | `midden edit YYYY-MM-DD` |
 | Undo the most recent entry | `midden undo` (only when the user explicitly asks to undo or remove a mistake) |
+| Summarize the last seven days | `midden weekly` (use `--offset N` for prior weeks) |
+| Import a markdown file as an entry | `midden import path/to/file.md --tag inbox` (or `-` to read from stdin) |
+| Render an HTML report | `midden report html -o ~/midden-report.html` |
 
 Pass `--json` to any of the read commands to receive structured output you can
 parse without regex.

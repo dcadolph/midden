@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{.Title}}</title>
+<style>
+:root {
+  --bg: #f5f1ea;
+  --fg: #1d1916;
+  --muted: #6b5e51;
+  --accent: #b3551f;
+  --border: #d8cfc1;
+  --card: #ffffff;
+  --hot: #b3551f;
+  --warm: #c98554;
+  --cool: #e6c9a7;
+  --empty: #e8e0d2;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1714;
+    --fg: #efe3d4;
+    --muted: #998777;
+    --accent: #e1773c;
+    --border: #382f28;
+    --card: #25201c;
+    --hot: #e1773c;
+    --warm: #b66738;
+    --cool: #5b4334;
+    --empty: #2e2722;
+  }
+}
+* { box-sizing: border-box; }
+body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 0; background: var(--bg); color: var(--fg); }
+.layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+nav { position: sticky; top: 0; align-self: start; padding: 24px 16px; border-right: 1px solid var(--border); background: var(--card); height: 100vh; }
+nav h1 { font-size: 20px; margin: 0 0 12px; }
+nav ul { list-style: none; padding: 0; margin: 0; }
+nav li { margin: 6px 0; }
+nav a { color: var(--fg); text-decoration: none; }
+nav a:hover { color: var(--accent); }
+main { padding: 32px 40px; max-width: 1100px; }
+section { margin-bottom: 48px; }
+h2 { font-size: 22px; margin: 0 0 14px; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.card { background: var(--card); border: 1px solid var(--border); padding: 16px; border-radius: 6px; }
+.card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+.card .value { font-size: 28px; margin-top: 6px; }
+.heatmap { display: grid; grid-template-columns: repeat({{.CalCols}}, 14px); grid-auto-rows: 14px; gap: 3px; }
+.heatmap .cell { width: 14px; height: 14px; border-radius: 2px; background: var(--empty); }
+.heatmap .cell.l1 { background: var(--cool); }
+.heatmap .cell.l2 { background: var(--warm); }
+.heatmap .cell.l3 { background: var(--hot); }
+.heatmap .cell[title] { cursor: pointer; }
+.tagbars { display: flex; flex-direction: column; gap: 4px; }
+.tagbar { display: grid; grid-template-columns: 140px 1fr 40px; align-items: center; gap: 8px; }
+.tagbar .bar { background: var(--accent); height: 12px; border-radius: 3px; }
+.tagbar .count { color: var(--muted); text-align: right; }
+.daylist { width: 100%; border-collapse: collapse; }
+.daylist th, .daylist td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+.daylist th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+@media print {
+  nav { display: none; }
+  .layout { grid-template-columns: 1fr; }
+  main { padding: 0; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+  <h1>midden</h1>
+  <ul>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#heatmap">Heatmap</a></li>
+    <li><a href="#tags">Tags</a></li>
+    <li><a href="#days">Days</a></li>
+  </ul>
+</nav>
+<main>
+  <section id="summary">
+    <h2>Summary</h2>
+    <div class="cards">
+      <div class="card"><div class="label">Days written</div><div class="value">{{.Stats.Days}}</div></div>
+      <div class="card"><div class="label">Entries</div><div class="value">{{.Stats.Entries}}</div></div>
+      <div class="card"><div class="label">Words</div><div class="value">{{.Stats.Words}}</div></div>
+      <div class="card"><div class="label">Streak</div><div class="value">{{.Streak}}</div></div>
+    </div>
+  </section>
+
+  <section id="heatmap">
+    <h2>Heatmap</h2>
+    <div class="heatmap">
+      {{range .Calendar}}<div class="cell {{.Class}}" title="{{.Date}}: {{.Count}} entr{{if eq .Count 1}}y{{else}}ies{{end}}"></div>{{end}}
+    </div>
+  </section>
+
+  <section id="tags">
+    <h2>Top tags</h2>
+    <div class="tagbars">
+      {{range .Tags}}<div class="tagbar"><span>{{.Tag}}</span><span class="bar" style="width: {{.Width}}%"></span><span class="count">{{.Count}}</span></div>{{end}}
+    </div>
+  </section>
+
+  <section id="days">
+    <h2>Days</h2>
+    <table class="daylist">
+      <thead><tr><th>Date</th><th>Entries</th><th>Words</th></tr></thead>
+      <tbody>
+        {{range .Days}}<tr><td>{{.Date}}</td><td>{{.Entries}}</td><td>{{.Words}}</td></tr>{{end}}
+      </tbody>
+    </table>
+  </section>
+</main>
+</div>
+</body>
+</html>
