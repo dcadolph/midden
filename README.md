@@ -29,6 +29,8 @@ midden add "text" --tag idea --tag work      Append with tags.
 echo "long body" | midden add                Append from stdin.
 midden add                                   Open editor to compose the entry.
 midden today                                 Open today's day file in the editor.
+midden edit                                  Edit today's day file (alias of today).
+midden edit 2026-06-16                       Edit a specific day file.
 midden last                                  Print the most recent entry.
 midden last -n 5                             Print the 5 most recent entries.
 midden recent -n 20                          Print the 20 most recent entries.
@@ -49,6 +51,11 @@ midden grep "pattern"                        Pass through ripgrep or grep over t
 midden raw 2026-06-16                        Print the raw markdown of a day file.
 midden path                                  Print the vault root.
 midden path today                            Print the path to today's day file.
+midden verify                                Check that every day file parses cleanly.
+midden export -f json                        Dump every entry as JSON.
+midden export -f jsonl                       Dump every entry as JSON Lines.
+midden export -f md                          Dump every entry as concatenated markdown.
+midden undo                                  Remove the most recent entry written.
 midden version                               Print the build version.
 midden completion bash                       Emit a shell completion script.
 ```

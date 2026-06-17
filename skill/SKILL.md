@@ -69,6 +69,10 @@ Map the user's question to the smallest matching command:
 | Same calendar date in past years | `midden flashback` |
 | Raw markdown of a day file | `midden raw YYYY-MM-DD` |
 | Filesystem path inside the vault | `midden path` or `midden path YYYY-MM-DD` |
+| Verify every day file parses | `midden verify` |
+| Dump entries for migration or analysis | `midden export -f json` (or `jsonl`/`md`) |
+| Edit a day in the editor | `midden edit YYYY-MM-DD` |
+| Undo the most recent entry | `midden undo` (only when the user explicitly asks to undo or remove a mistake) |
 
 Pass `--json` to any of the read commands to receive structured output you can
 parse without regex.
