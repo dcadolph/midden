@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/dcadolph/midden/internal/flock"
 )
 
 // Entry is a single journal record within a day file.
@@ -19,22 +21,41 @@ type Entry struct {
 
 // Append writes the entry to the appropriate day file in the vault.
 // The day file is created with a header if it does not yet exist.
-// Entries are appended in arrival order; the file is not re-sorted.
+// Entries are appended in arrival order under an advisory lock so concurrent
+// writers do not interleave bytes; entries are never re-sorted by Append.
+// Encrypted vaults are read-decrypted-appended-encrypted in one pass to keep
+// the file sealed at rest.
 func (v *Vault) Append(entry Entry) error {
 	if strings.TrimSpace(entry.Body) == "" {
 		return fmt.Errorf("entry body is empty")
 	}
+	lock, err := flock.Acquire(v.LockPath())
+	if err != nil {
+		return fmt.Errorf("acquire vault lock: %w", err)
+	}
+	defer lock.Close()
 	path, err := v.EnsureDayFile(entry.Time)
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Errorf("open day file: %w", err)
+	if v.Passphrase == "" {
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return fmt.Errorf("open day file: %w", err)
+		}
+		defer f.Close()
+		if _, err := f.WriteString(entry.Serialize()); err != nil {
+			return fmt.Errorf("append entry: %w", err)
+		}
+		return nil
 	}
-	defer f.Close()
-	if _, err := f.WriteString(entry.Serialize()); err != nil {
-		return fmt.Errorf("append entry: %w", err)
+	existing, err := v.readDayBytes(path)
+	if err != nil {
+		return err
+	}
+	updated := append(existing, []byte(entry.Serialize())...)
+	if err := v.writeDayBytes(path, updated); err != nil {
+		return err
 	}
 	return nil
 }

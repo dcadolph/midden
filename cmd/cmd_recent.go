@@ -32,6 +32,5 @@ func runRecent(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("read recent: %w", err))
 	}
-	printEntries(cmd.OutOrStdout(), entries)
-	return nil
+	return printEntries(cmd.OutOrStdout(), entries)
 }

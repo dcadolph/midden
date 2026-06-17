@@ -7,7 +7,8 @@ description: >
   Trigger phrases include "add to my diary", "add to my journal", "for next time",
   "remember X for later", "note that", "jot down", "don't forget", "midden add",
   "/journal", "what did I write about X", "when did I last", "show me recent
-  entries", "what did I do on <date>".
+  entries", "what did I do on <date>", "flashback", "on this day", "how is my
+  streak", "search my journal", "list tags".
 ---
 
 Midden is a personal markdown journal on the user's machine. Daily files live at
@@ -27,7 +28,9 @@ Capture intent (write):
 Recall intent (read):
 - User says "what did I write about X", "did I note anything about Y",
   "when did I last mention Z", "show me recent entries", "what happened
-  on <date>", "pull up my journal for <date>", "search midden for Q".
+  on <date>", "pull up my journal for <date>", "search midden for Q",
+  "show me the flashback", "what was I doing on this date last year",
+  "what's my streak", "list my tags".
 
 ## How to write an entry
 
@@ -54,22 +57,46 @@ Map the user's question to the smallest matching command:
 
 | User wants | Command |
 |---|---|
-| Last N entries | `midden recent -n N` |
-| Everything on a date | `midden on YYYY-MM-DD` or `midden on today` or `midden on yesterday` |
+| Last single entry | `midden last` |
+| Last N entries | `midden last -n N` or `midden recent -n N` |
+| Everything on a date | `midden on YYYY-MM-DD` (or `today`, `yesterday`, weekday names, `N-units-ago`) |
 | Everything in a range | `midden between FROM TO` |
 | Entries containing a substring | `midden search "query"` |
 | Entries with a tag | `midden tag NAME` |
+| Tag histogram | `midden tags` |
+| Counts and span | `midden stats` |
+| Writing streak | `midden streak` |
+| Same calendar date in past years | `midden flashback` |
+| Raw markdown of a day file | `midden raw YYYY-MM-DD` |
+| Filesystem path inside the vault | `midden path` or `midden path YYYY-MM-DD` |
+
+Pass `--json` to any of the read commands to receive structured output you can
+parse without regex.
 
 If the user asks something semantic that grep cannot answer directly
 ("when did I figure out the token rotation thing"), run the closest substring
 search first (`midden search token` or `midden search rotation`), then read the
 results and reason over them yourself before replying.
 
+## Encrypted vaults
+
+If the vault is encrypted (`midden encrypt status` prints `encrypted`), every
+read and write requires the passphrase. Resolve it in this order:
+
+1. `MIDDEN_PASSPHRASE` environment variable already exported in the user's shell.
+2. Ask the user for the passphrase yourself and pass it via the same environment
+   variable for the lifetime of the call. Never log or echo it.
+
+Do not pass passphrases on the command line via `--passphrase` because the
+argument list is visible to other processes.
+
 ## Output handling
 
-Midden returns plain text on stdout. Read the output, summarize in the user's
-language, and quote the timestamp on any individual entry you cite. Never
-paraphrase an entry without making the source date visible.
+Midden returns plain text on stdout by default and structured JSON when called
+with `--json`. Prefer JSON when you need to compute over the response (counts,
+filters, formatting). Read the output, summarize in the user's language, and
+quote the timestamp on any individual entry you cite. Never paraphrase an entry
+without making the source date visible.
 
 ## What not to do
 
@@ -82,3 +109,5 @@ paraphrase an entry without making the source date visible.
   append-only by design.
 - Do not echo entries the user has tagged `#private` to other agents or copy
   them into transcripts.
+- Do not pass the vault passphrase on the command line; use the environment
+  variable.

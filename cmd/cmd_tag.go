@@ -32,6 +32,5 @@ func runTag(cmd *cobra.Command, args []string) error {
 	if len(entries) == 0 {
 		return errors.Join(ErrNotFound, fmt.Errorf("no entries with tag %q", args[0]))
 	}
-	printEntries(cmd.OutOrStdout(), entries)
-	return nil
+	return printEntries(cmd.OutOrStdout(), entries)
 }

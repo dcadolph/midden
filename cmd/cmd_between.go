@@ -5,12 +5,14 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"github.com/dcadolph/midden/internal/dateutil"
 )
 
 // betweenCmd prints every entry whose date is within an inclusive range.
 var betweenCmd = &cobra.Command{
 	Use:   "between [from] [to]",
-	Short: "Show every entry between two dates inclusive (YYYY-MM-DD, today, yesterday).",
+	Short: "Show every entry between two dates inclusive (YYYY-MM-DD, today, yesterday, weekday, N-units-ago).",
 	Args:  cobra.ExactArgs(2),
 	RunE:  runBetween,
 }
@@ -21,11 +23,11 @@ func init() {
 
 // runBetween executes the between subcommand.
 func runBetween(cmd *cobra.Command, args []string) error {
-	from, err := parseDayArg(args[0])
+	from, err := dateutil.Parse(args[0])
 	if err != nil {
 		return err
 	}
-	to, err := parseDayArg(args[1])
+	to, err := dateutil.Parse(args[1])
 	if err != nil {
 		return err
 	}
@@ -40,6 +42,5 @@ func runBetween(cmd *cobra.Command, args []string) error {
 	if len(entries) == 0 {
 		return errors.Join(ErrNotFound, fmt.Errorf("no entries in range"))
 	}
-	printEntries(cmd.OutOrStdout(), entries)
-	return nil
+	return printEntries(cmd.OutOrStdout(), entries)
 }

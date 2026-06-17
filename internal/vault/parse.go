@@ -2,6 +2,7 @@ package vault
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,17 +23,24 @@ var tagRe = regexp.MustCompile(`#([A-Za-z0-9_\-]+)`)
 
 // ReadDay parses every entry in the day file for the given local date.
 // It returns an empty slice and a nil error when the file does not exist.
+// Encrypted day files are decrypted with the vault passphrase before parsing.
 func (v *Vault) ReadDay(day time.Time) ([]Entry, error) {
 	path := v.DayPath(day)
-	f, err := os.Open(path)
-	if err != nil {
+	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("open day file: %w", err)
+		return nil, fmt.Errorf("stat day file: %w", err)
 	}
-	defer f.Close()
+	data, err := v.readDayBytes(path)
+	if err != nil {
+		return nil, err
+	}
+	return parseDayBytes(day, path, data)
+}
 
+// parseDayBytes turns the plaintext day file contents into Entry values.
+func parseDayBytes(day time.Time, path string, data []byte) ([]Entry, error) {
 	dayDate := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, day.Location())
 	var entries []Entry
 	var current *Entry
@@ -48,7 +56,7 @@ func (v *Vault) ReadDay(day time.Time) ([]Entry, error) {
 		body.Reset()
 	}
 
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
