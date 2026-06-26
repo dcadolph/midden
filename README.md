@@ -1,6 +1,8 @@
-# midden
+<p align="center">
+  <img src="assets/hermey.png" alt="midden" width="100%">
+</p>
 
-<img src="assets/hermey.png" alt="Hermey" width="240">
+# midden
 
 A personal journal kept as plain markdown. Append timestamped entries from the terminal or through a Claude Code skill. Search across years with grep.
 
