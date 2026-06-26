@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/dcadolph/midden/internal/dateutil"
+	"github.com/dcadolph/midden/dateutil"
 )
 
 // onCmd prints every entry from a single day.

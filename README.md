@@ -22,10 +22,25 @@ cd midden
 go install .
 ```
 
-## Use
+## Quick start
 
 ```
-midden init                                  Create the vault, write a vault README and gitignore.
+midden init                          Create the vault, write a vault README and gitignore.
+midden add "text"                    Append an entry to today.
+midden add "text" --tag work         Append with tags.
+midden today                         Open today's day file in the editor.
+midden on yesterday                  Print every entry for yesterday.
+midden search "token"                Find entries whose body or tags contain text.
+```
+
+Full command list and every integration are in the sections below.
+
+## Commands
+
+<details>
+<summary><b>Write</b></summary>
+
+```
 midden add "text"                            Append an entry to today.
 midden add "text" --tag idea --tag work      Append with tags.
 echo "long body" | midden add                Append from stdin.
@@ -33,6 +48,20 @@ midden add                                   Open editor to compose the entry.
 midden today                                 Open today's day file in the editor.
 midden edit                                  Edit today's day file (alias of today).
 midden edit 2026-06-16                       Edit a specific day file.
+midden undo                                  Remove the most recent entry written.
+midden import path/to/note.md --tag inbox    Append a file as one entry on today.
+midden import - --date 2026-06-10            Read stdin and file it on a chosen date.
+midden audio                                 Record a voice memo and append it to today.
+midden audio --duration 30s --transcribe     Record for 30s then transcribe with OpenAI Whisper.
+midden ingest ics calendar.ics               Append calendar events from an .ics export.
+```
+
+</details>
+
+<details>
+<summary><b>Read</b></summary>
+
+```
 midden last                                  Print the most recent entry.
 midden last -n 5                             Print the 5 most recent entries.
 midden recent -n 20                          Print the 20 most recent entries.
@@ -43,42 +72,65 @@ midden on last-monday                        Print every entry on the most recen
 midden on 3-days-ago                         Print every entry from three days ago.
 midden between yesterday today               Print every entry in a date range.
 midden between 2-weeks-ago today             Print every entry in the last two weeks.
+midden weekly                                Print a 7-day digest grouped by day.
+midden weekly --offset 1                     Digest the prior week.
+midden flashback                             Show entries on today's calendar date in past years.
+midden raw 2026-06-16                        Print the raw markdown of a day file.
+```
+
+</details>
+
+<details>
+<summary><b>Search</b></summary>
+
+```
 midden search "token"                        Find entries whose body or tags contain text.
+midden grep "pattern"                        Pass through ripgrep or grep over the vault.
 midden tag work                              List entries with a tag.
 midden tags                                  Show the tag histogram.
+midden recall "token rotation strategy"      Semantic search over indexed entries.
+midden chat "when did I last see Mom?"       Ask an LLM a question using recalled entries as evidence.
+midden reindex                               Build the embedding index used by recall.
+```
+
+</details>
+
+<details>
+<summary><b>Inspect and export</b></summary>
+
+```
 midden stats                                 Show counts, span, top tags.
 midden streak                                Show consecutive days written ending today.
-midden flashback                             Show entries on today's calendar date in past years.
-midden grep "pattern"                        Pass through ripgrep or grep over the vault.
-midden raw 2026-06-16                        Print the raw markdown of a day file.
-midden path                                  Print the vault root.
-midden path today                            Print the path to today's day file.
 midden verify                                Check that every day file parses cleanly.
 midden export -f json                        Dump every entry as JSON.
 midden export -f jsonl                       Dump every entry as JSON Lines.
 midden export -f md                          Dump every entry as concatenated markdown.
-midden undo                                  Remove the most recent entry written.
-midden version                               Print the build version.
-midden completion bash                       Emit a shell completion script.
-midden config path                           Print the resolved config file path.
-midden config show                           Print the loaded configuration.
+midden report html -o report.html            Render an HTML report (dark mode aware).
+midden path                                  Print the vault root.
+midden path today                            Print the path to today's day file.
+```
+
+</details>
+
+<details>
+<summary><b>Git, config, misc</b></summary>
+
+```
 midden git init                              Initialize the vault as a git repository.
 midden git status                            Print the vault git status.
 midden git sync                              Stage, commit, and push to origin if configured.
-midden weekly                                Print a 7-day digest grouped by day.
-midden weekly --offset 1                     Digest the prior week.
-midden import path/to/note.md --tag inbox    Append a file as one entry on today.
-midden import - --date 2026-06-10            Read stdin and file it on a chosen date.
-midden report html -o report.html            Render an HTML report (dark mode aware).
-midden audio                                 Record a voice memo and append it to today.
-midden audio --duration 30s --transcribe     Record for 30s then transcribe with OpenAI Whisper.
-midden ingest ics calendar.ics               Append calendar events from an .ics export.
-midden reindex                               Build the embedding index used by recall.
-midden recall "token rotation strategy"      Semantic search over indexed entries.
-midden chat "when did I last see Mom?"       Ask an LLM a question using recalled entries as evidence.
+midden config path                           Print the resolved config file path.
+midden config show                           Print the loaded configuration.
+midden completion bash                       Emit a shell completion script.
+midden version                               Print the build version.
 ```
 
-## LLM and audio integrations
+</details>
+
+## Integrations and details
+
+<details>
+<summary><b>LLM and audio</b></summary>
 
 Recall, chat, reindex, and Whisper transcription call external models. Each provider is selected from environment variables; midden never sends anything until you opt in by setting one.
 
@@ -94,7 +146,10 @@ Run `midden reindex` after major writes to keep the embedding index fresh. The i
 
 Audio capture uses the first available recorder in this order: `sox`, `rec`, `ffmpeg` (avfoundation on macOS, alsa on Linux, dshow on Windows). Recorded WAVs land in `<vault>/audio/YYYY/MM/DD/HH-MM-SS.wav` and the day file gains a linking entry.
 
-## Configuration
+</details>
+
+<details>
+<summary><b>Configuration</b></summary>
 
 Optional YAML at `$MIDDEN_CONFIG`, falling back to `$XDG_CONFIG_HOME/midden/config.yaml` or `~/.config/midden/config.yaml`.
 
@@ -122,7 +177,10 @@ Vault location: `$MIDDEN_HOME` if set, else `~/midden`. Override per run with `-
 
 Editor for `today` and editor-mode `add`: `$MIDDEN_EDITOR` then `$VISUAL` then `$EDITOR` then `vi`.
 
-## Encryption
+</details>
+
+<details>
+<summary><b>Encryption</b></summary>
 
 Day files can be sealed at rest with a passphrase. Encryption uses [age](https://age-encryption.org) with its scrypt recipient, so the only key material is the passphrase you choose.
 
@@ -131,6 +189,8 @@ midden encrypt status         Print whether the vault is encrypted.
 midden encrypt enable         Encrypt every day file and lock the vault.
 midden encrypt disable        Decrypt every day file and unlock the vault.
 midden encrypt verify         Check that the supplied passphrase unlocks the vault.
+midden encrypt store          Save the passphrase to the OS keychain.
+midden encrypt forget         Remove the stored passphrase from the keychain.
 ```
 
 Passphrase resolution for any command, in order:
@@ -140,18 +200,14 @@ Passphrase resolution for any command, in order:
 3. OS keychain when `keychain: true` is set in the config.
 4. Interactive prompt read from `/dev/tty` with no echo.
 
-The keychain backend is the system Keychain on macOS, Secret Service or KWallet on Linux, and Credential Manager on Windows. Store and forget with:
+The keychain backend is the system Keychain on macOS, Secret Service or KWallet on Linux, and Credential Manager on Windows.
 
-```
-midden encrypt store         Save the passphrase to the OS keychain.
-midden encrypt forget        Remove the stored passphrase from the keychain.
-```
+Encrypted vaults read-decrypt-append-encrypt the relevant day file inside an advisory lock so concurrent writers can never interleave bytes. Plaintext vaults use the fast `O_APPEND` path.
 
-Encrypted vaults read-decrypt-append-encrypt the relevant day file inside an
-advisory lock so concurrent writers can never interleave bytes. Plaintext
-vaults use the fast `O_APPEND` path.
+</details>
 
-## Vault layout
+<details>
+<summary><b>Vault layout</b></summary>
 
 ```
 ~/midden/
@@ -174,7 +230,10 @@ Body of the entry, which is free-form markdown.
 Second entry on the same day.
 ```
 
-## Claude Code skill
+</details>
+
+<details>
+<summary><b>Claude Code skill</b></summary>
 
 `skill/SKILL.md` ships a Claude Code skill that drives the CLI from natural language. Install it once:
 
@@ -184,6 +243,8 @@ cp skill/SKILL.md ~/.claude/skills/midden/SKILL.md
 ```
 
 Phrases like "add to my diary", "remember X for later", or "what did I write about Y last month" reach midden through any Claude Code session.
+
+</details>
 
 ## License
 

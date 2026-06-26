@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/dcadolph/midden/internal/dateutil"
+	"github.com/dcadolph/midden/dateutil"
 )
 
 // pathCmd prints filesystem paths inside the vault.

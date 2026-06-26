@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/dcadolph/midden/internal/dateutil"
+	"github.com/dcadolph/midden/dateutil"
 	"github.com/dcadolph/midden/internal/vault"
 )
 

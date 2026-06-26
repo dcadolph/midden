@@ -9,9 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/dcadolph/midden/internal/index"
-	"github.com/dcadolph/midden/internal/llm"
+	"github.com/dcadolph/midden/index"
 	"github.com/dcadolph/midden/internal/vault"
+	"github.com/dcadolph/midden/llm"
 )
 
 // reindexBatch sets the number of entries embedded per provider call.

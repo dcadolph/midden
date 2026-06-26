@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/dcadolph/midden/internal/crypt"
+	"github.com/dcadolph/midden/crypt"
 )
 
 // encryptToBytes returns the ciphertext bytes for plaintext using passphrase.

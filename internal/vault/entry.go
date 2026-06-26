@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dcadolph/midden/internal/flock"
+	"github.com/dcadolph/midden/flock"
 )
 
 // Entry is a single journal record within a day file.

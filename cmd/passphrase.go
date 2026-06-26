@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/dcadolph/midden/internal/keyring"
+	"github.com/dcadolph/midden/keyring"
 )
 
 // EnvPassphrase is the environment variable that supplies the vault passphrase

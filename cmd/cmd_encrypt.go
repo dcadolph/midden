@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/dcadolph/midden/internal/keyring"
 	"github.com/dcadolph/midden/internal/vault"
+	"github.com/dcadolph/midden/keyring"
 )
 
 // encryptCmd groups vault encryption subcommands.

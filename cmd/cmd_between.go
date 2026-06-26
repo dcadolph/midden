@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/dcadolph/midden/internal/dateutil"
+	"github.com/dcadolph/midden/dateutil"
 )
 
 // betweenCmd prints every entry whose date is within an inclusive range.
