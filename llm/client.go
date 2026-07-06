@@ -50,7 +50,7 @@ func postJSON(ctx context.Context, label, url string, headers map[string]string,
 	}
 	var lastErr error
 	var delay time.Duration
-	for attempt := 0; attempt < retryAttempts; attempt++ {
+	for attempt := range retryAttempts {
 		if delay > 0 {
 			select {
 			case <-time.After(delay):
