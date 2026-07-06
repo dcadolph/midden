@@ -47,10 +47,7 @@ func runReindex(cmd *cobra.Command, _ []string) error {
 	defer cancel()
 	idx := &index.Index{Provider: emb.Name(), BuiltAt: time.Now()}
 	for start := 0; start < len(entries); start += reindexBatch {
-		end := start + reindexBatch
-		if end > len(entries) {
-			end = len(entries)
-		}
+		end := min(start+reindexBatch, len(entries))
 		batch := entries[start:end]
 		texts := make([]string, len(batch))
 		for i, e := range batch {

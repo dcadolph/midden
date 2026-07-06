@@ -180,10 +180,7 @@ func buildTagBars(tags []vault.TagCount) []TagBar {
 	for i, t := range tags {
 		w := 0
 		if top > 0 {
-			w = int(float64(t.Count) / float64(top) * 100)
-			if w < 4 {
-				w = 4
-			}
+			w = max(int(float64(t.Count)/float64(top)*100), 4)
 		}
 		out[i] = TagBar{Tag: t.Tag, Count: t.Count, Width: w}
 	}

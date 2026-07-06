@@ -18,9 +18,9 @@ type Stats struct {
 	// Tags is the number of distinct tag labels in use.
 	Tags int `json:"tags"`
 	// FirstEntry is the timestamp of the earliest entry, or the zero time when the vault is empty.
-	FirstEntry time.Time `json:"first_entry,omitempty"`
+	FirstEntry time.Time `json:"first_entry"`
 	// LastEntry is the timestamp of the latest entry, or the zero time when the vault is empty.
-	LastEntry time.Time `json:"last_entry,omitempty"`
+	LastEntry time.Time `json:"last_entry"`
 	// TopTags is the tag histogram ordered by descending count then label.
 	TopTags []TagCount `json:"top_tags,omitempty"`
 }

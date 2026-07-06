@@ -108,14 +108,14 @@ func applyProperty(e *Event, line string) {
 
 // splitProperty splits a logical line into its name, parameters, and value.
 func splitProperty(line string) (string, string, string, bool) {
-	colon := strings.Index(line, ":")
-	if colon < 0 {
+	before, after, ok := strings.Cut(line, ":")
+	if !ok {
 		return "", "", "", false
 	}
-	head := line[:colon]
-	value := line[colon+1:]
-	if semi := strings.Index(head, ";"); semi >= 0 {
-		return head[:semi], head[semi+1:], value, true
+	head := before
+	value := after
+	if before, after, ok := strings.Cut(head, ";"); ok {
+		return before, after, value, true
 	}
 	return head, "", value, true
 }

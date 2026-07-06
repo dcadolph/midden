@@ -68,7 +68,7 @@ func TestEncryptedAppendPreservesPriorEntries(t *testing.T) {
 	}
 	enc := plain.WithPassphrase("pass1")
 	day := time.Date(2026, 6, 16, 0, 0, 0, 0, time.Local)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if err := enc.Append(Entry{Time: day.Add(time.Duration(i) * time.Hour), Body: "entry"}); err != nil {
 			t.Fatalf("Append: %v", err)
 		}

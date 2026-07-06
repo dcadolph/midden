@@ -78,7 +78,7 @@ func entriesOnDay(entries []vault.Entry, day time.Time) []vault.Entry {
 
 // firstLine returns the first non-empty line of s.
 func firstLine(s string) string {
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			return line
