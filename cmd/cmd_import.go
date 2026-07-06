@@ -47,7 +47,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := v.Append(vault.Entry{Time: when, Tags: normalizeTags(importTags), Body: body}); err != nil {
+	if err := v.Append(vault.Entry{Time: when, Tags: entryTags(importTags), Body: body}); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("append imported entry: %w", err))
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Imported %s into %s\n", args[0], when.Format("2006-01-02 15:04:05"))
@@ -63,7 +63,7 @@ func readImportBody(path string) (string, error) {
 		}
 		return string(data), nil
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // Import path supplied by the user.
 	if err != nil {
 		return "", fmt.Errorf("read file %s: %w", path, err)
 	}

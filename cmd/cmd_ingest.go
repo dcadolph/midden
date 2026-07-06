@@ -58,7 +58,7 @@ func runIngestICS(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("open %s: %w", args[0], err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	events, err := ics.Parse(f)
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("parse ics: %w", err))
@@ -67,7 +67,7 @@ func runIngestICS(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	tags := normalizeTags(ingestTag)
+	tags := entryTags(ingestTag)
 	count := 0
 	for _, e := range events {
 		if e.Start.Before(from) || e.Start.After(to) {

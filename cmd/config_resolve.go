@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/dcadolph/midden/internal/config"
@@ -40,6 +42,24 @@ func resolveVaultDir() string {
 func resolveDefaultTags() []string {
 	cfg, _ := userConfig()
 	return append([]string(nil), cfg.DefaultTags...)
+}
+
+// mergeTags returns the normalized union of defaults and flags, dropping
+// case-insensitive duplicates while preserving first-seen order and case.
+func mergeTags(defaults, flags []string) []string {
+	merged := normalizeTags(append(append([]string(nil), defaults...), flags...))
+	var out []string
+	for _, t := range merged {
+		if !slices.ContainsFunc(out, func(kept string) bool { return strings.EqualFold(kept, t) }) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// entryTags merges the config default tags with the per-command tags for a new entry.
+func entryTags(flagTags []string) []string {
+	return mergeTags(resolveDefaultTags(), flagTags)
 }
 
 // resolveEditorOverride returns the config-supplied editor command or an empty string.

@@ -53,7 +53,7 @@ func runAudio(cmd *cobra.Command, _ []string) error {
 	}
 	when := time.Now()
 	dir := filepath.Join(v.Dir, "audio", when.Format("2006"), when.Format("01"), when.Format("02"))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("create audio directory: %w", err))
 	}
 	path := filepath.Join(dir, when.Format("15-04-05")+".wav")
@@ -69,7 +69,7 @@ func runAudio(cmd *cobra.Command, _ []string) error {
 			body = strings.TrimSpace(text) + "\n\nAudio: `" + path + "`"
 		}
 	}
-	if err := v.Append(vault.Entry{Time: when, Tags: normalizeTags(audioTags), Body: body}); err != nil {
+	if err := v.Append(vault.Entry{Time: when, Tags: entryTags(audioTags), Body: body}); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("append audio entry: %w", err))
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Saved audio to %s\n", path)
@@ -86,7 +86,7 @@ func recordAudio(cmd *cobra.Command, path string) error {
 		args = appendDurationArg(binary, args, audioDuration)
 	}
 	fmt.Fprintf(cmd.ErrOrStderr(), "Recording with %s. Press Ctrl-C to stop.\n", binary)
-	c := exec.Command(binary, args...)
+	c := exec.Command(binary, args...) //nolint:gosec // Recorder binary resolved via exec.LookPath.
 	c.Stdin = os.Stdin
 	c.Stdout = cmd.ErrOrStderr()
 	c.Stderr = cmd.ErrOrStderr()
@@ -147,11 +147,11 @@ func transcribeWhisper(path string) (string, error) {
 	if key == "" {
 		return "", errors.New("OPENAI_API_KEY is not set")
 	}
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // Recording path built from the vault directory.
 	if err != nil {
 		return "", fmt.Errorf("open audio: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
 	if err := w.WriteField("model", "whisper-1"); err != nil {
@@ -179,7 +179,7 @@ func transcribeWhisper(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("whisper: %s: %s", resp.Status, string(data))

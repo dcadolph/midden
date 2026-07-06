@@ -49,7 +49,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 	entry := vault.Entry{
 		Time: time.Now(),
-		Tags: normalizeTags(addTags),
+		Tags: entryTags(addTags),
 		Body: body,
 	}
 	if err := v.Append(entry); err != nil {
@@ -84,21 +84,23 @@ func readBodyFromEditor() (string, error) {
 		return "", fmt.Errorf("create temp file: %w", err)
 	}
 	path := tmp.Name()
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 	if _, err := tmp.WriteString("\n"); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return "", fmt.Errorf("write temp file: %w", err)
 	}
-	tmp.Close()
+	if err := tmp.Close(); err != nil {
+		return "", fmt.Errorf("close temp file: %w", err)
+	}
 
-	c := exec.Command(editor, path)
+	c := exec.Command(editor, path) //nolint:gosec // Editor comes from user config or environment.
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	if err := c.Run(); err != nil {
 		return "", errors.Join(ErrEditor, fmt.Errorf("editor %s exited: %w", filepath.Base(editor), err))
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // Temp file created above.
 	if err != nil {
 		return "", fmt.Errorf("read temp file: %w", err)
 	}
@@ -106,7 +108,11 @@ func readBodyFromEditor() (string, error) {
 }
 
 // chooseEditor picks the user's preferred editor, falling back to vi.
+// The config file editor wins, then MIDDEN_EDITOR, VISUAL, and EDITOR.
 func chooseEditor() string {
+	if editor := resolveEditorOverride(); editor != "" {
+		return editor
+	}
 	for _, env := range []string{"MIDDEN_EDITOR", "VISUAL", "EDITOR"} {
 		if v := os.Getenv(env); v != "" {
 			return v
