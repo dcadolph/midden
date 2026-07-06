@@ -36,7 +36,7 @@ func runOn(cmd *cobra.Command, args []string) error {
 		return errors.Join(ErrVault, fmt.Errorf("read day: %w", err))
 	}
 	if len(entries) == 0 {
-		return errors.Join(ErrNotFound, fmt.Errorf("no entries on %s", day.Format("2006-01-02")))
+		return errors.Join(ErrNotFound, fmt.Errorf("no entries on %s", day.Format(layoutDate)))
 	}
 	return printEntries(cmd.OutOrStdout(), entries)
 }

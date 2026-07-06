@@ -1,18 +1,12 @@
 package cmd
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/dcadolph/midden/index"
 	"github.com/dcadolph/midden/internal/vault"
-	"github.com/dcadolph/midden/llm"
 )
 
 // recallTopK caps the number of entries returned.
@@ -37,25 +31,11 @@ func runRecall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	idx, err := index.Load(filepath.Join(v.Dir, index.Filename))
+	rc, err := embedRecallQuery(cmd, v, strings.Join(args, " "), 60*time.Second)
 	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("load index: %w", err))
+		return err
 	}
-	if len(idx.Entries) == 0 {
-		return errors.Join(ErrNotFound, fmt.Errorf("no index found: run `midden reindex` first"))
-	}
-	emb, err := llm.EmbedderFromEnv()
-	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("pick embedder: %w", err))
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	q := strings.Join(args, " ")
-	vecs, err := emb.Embed(ctx, []string{q})
-	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("embed query: %w", err))
-	}
-	matches := idx.Search(vecs[0], recallTopK)
+	matches := rc.Index.Search(rc.Query, recallTopK)
 	out := make([]vault.Entry, len(matches))
 	for i, m := range matches {
 		out[i] = vault.Entry{Time: m.Entry.Time, Tags: m.Entry.Tags, Body: m.Entry.Body}

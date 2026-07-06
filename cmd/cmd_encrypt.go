@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/dcadolph/midden/crypt"
+	"github.com/dcadolph/midden/flock"
 	"github.com/dcadolph/midden/internal/vault"
 	"github.com/dcadolph/midden/keyring"
 )
@@ -39,10 +41,11 @@ var encryptDisableCmd = &cobra.Command{
 	RunE:  runEncryptDisable,
 }
 
-// encryptVerifyCmd checks that the supplied passphrase decrypts the most recent day file.
+// encryptVerifyCmd checks the passphrase against the newest encrypted day file
+// and reports any files still sitting in plaintext.
 var encryptVerifyCmd = &cobra.Command{
 	Use:   "verify",
-	Short: "Verify that the supplied passphrase unlocks the vault.",
+	Short: "Verify the passphrase against the newest encrypted day file and report plaintext stragglers.",
 	RunE:  runEncryptVerify,
 }
 
@@ -84,41 +87,72 @@ func runEncryptStatus(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// runEncryptEnable transforms every day file from plaintext to ciphertext and writes the marker.
+// runEncryptEnable ensures every day file is encrypted and the marker is set.
+// The whole conversion runs under the vault lock so concurrent appends cannot
+// interleave, and files that already carry the age header are skipped, so the
+// command is safe to rerun after an interruption or to seal plaintext
+// stragglers in an already-encrypted vault.
 func runEncryptEnable(cmd *cobra.Command, _ []string) error {
 	v, err := openVaultRaw()
 	if err != nil {
 		return err
 	}
+	var pass string
 	if v.IsEncrypted() {
-		return fmt.Errorf("vault already encrypted")
+		pass, err = resolvePassphrase("Vault passphrase: ")
+	} else {
+		pass, err = resolvePassphraseWithConfirm("New vault passphrase: ")
 	}
-	pass, err := resolvePassphraseWithConfirm("New vault passphrase: ")
 	if err != nil {
 		return err
 	}
+	lock, err := flock.Acquire(v.LockPath())
+	if err != nil {
+		return errors.Join(ErrVault, fmt.Errorf("acquire vault lock: %w", err))
+	}
+	defer func() { _ = lock.Close() }()
 	encrypted := v.WithPassphrase(pass)
+	if v.IsEncrypted() {
+		if err := encrypted.VerifyPassphrase(); err != nil {
+			return errors.Join(ErrVault, err)
+		}
+	}
 	files, err := dayFilePaths(v)
 	if err != nil {
 		return errors.Join(ErrVault, err)
 	}
+	sealed, skipped := 0, 0
 	for _, p := range files {
 		data, err := os.ReadFile(p) //nolint:gosec // Day paths enumerated from the vault directory.
 		if err != nil {
 			return errors.Join(ErrVault, fmt.Errorf("read %s: %w", p, err))
 		}
+		if crypt.IsEncrypted(data) {
+			skipped++
+			continue
+		}
 		if err := encrypted.WriteBytes(p, data); err != nil {
 			return errors.Join(ErrVault, fmt.Errorf("encrypt %s: %w", p, err))
 		}
+		if _, err := encrypted.ReadBytes(p); err != nil {
+			return errors.Join(ErrVault, fmt.Errorf("round-trip verify %s: %w", p, err))
+		}
+		sealed++
 	}
 	if err := v.SetEncrypted(); err != nil {
 		return errors.Join(ErrVault, err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Encrypted %d file(s).\n", len(files))
+	if skipped > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "Encrypted %d file(s), %d already encrypted.\n", sealed, skipped)
+		return nil
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Encrypted %d file(s).\n", sealed)
 	return nil
 }
 
 // runEncryptDisable transforms every day file from ciphertext to plaintext and removes the marker.
+// The conversion runs under the vault lock; already-plaintext files are skipped
+// so a rerun after an interrupted disable finishes the job.
 func runEncryptDisable(cmd *cobra.Command, _ []string) error {
 	v, err := openVaultRaw()
 	if err != nil {
@@ -131,28 +165,43 @@ func runEncryptDisable(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	lock, err := flock.Acquire(v.LockPath())
+	if err != nil {
+		return errors.Join(ErrVault, fmt.Errorf("acquire vault lock: %w", err))
+	}
+	defer func() { _ = lock.Close() }()
 	encrypted := v.WithPassphrase(pass)
 	files, err := dayFilePaths(v)
 	if err != nil {
 		return errors.Join(ErrVault, err)
 	}
+	opened := 0
 	for _, p := range files {
+		raw, err := os.ReadFile(p) //nolint:gosec // Day paths enumerated from the vault directory.
+		if err != nil {
+			return errors.Join(ErrVault, fmt.Errorf("read %s: %w", p, err))
+		}
+		if !crypt.IsEncrypted(raw) {
+			continue
+		}
 		data, err := encrypted.ReadBytes(p)
 		if err != nil {
 			return errors.Join(ErrVault, fmt.Errorf("decrypt %s: %w", p, err))
 		}
-		if err := os.WriteFile(p, data, 0o600); err != nil {
+		if err := v.WriteBytes(p, data); err != nil {
 			return errors.Join(ErrVault, fmt.Errorf("write %s: %w", p, err))
 		}
+		opened++
 	}
 	if err := v.ClearEncrypted(); err != nil {
 		return errors.Join(ErrVault, err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Decrypted %d file(s).\n", len(files))
+	fmt.Fprintf(cmd.OutOrStdout(), "Decrypted %d file(s).\n", opened)
 	return nil
 }
 
-// runEncryptVerify confirms that the supplied passphrase decrypts the most recent day file.
+// runEncryptVerify confirms the passphrase decrypts the newest encrypted day
+// file and counts files that still lack the age header.
 func runEncryptVerify(cmd *cobra.Command, _ []string) error {
 	v, err := openVaultRaw()
 	if err != nil {
@@ -174,9 +223,27 @@ func runEncryptVerify(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(cmd.OutOrStdout(), "ok (no files to verify)")
 		return nil
 	}
-	last := files[len(files)-1]
-	if _, err := encrypted.ReadBytes(last); err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("verify %s: %w", last, err))
+	plaintext := 0
+	newestEncrypted := ""
+	for _, p := range files {
+		raw, err := os.ReadFile(p) //nolint:gosec // Day paths enumerated from the vault directory.
+		if err != nil {
+			return errors.Join(ErrVault, fmt.Errorf("read %s: %w", p, err))
+		}
+		if crypt.IsEncrypted(raw) {
+			newestEncrypted = p
+		} else {
+			plaintext++
+		}
+	}
+	if newestEncrypted != "" {
+		if _, err := encrypted.ReadBytes(newestEncrypted); err != nil {
+			return errors.Join(ErrVault, fmt.Errorf("verify %s: %w", newestEncrypted, err))
+		}
+	}
+	if plaintext > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "ok, but %d file(s) are plaintext; run `midden encrypt enable` to seal them\n", plaintext)
+		return nil
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "ok")
 	return nil

@@ -3,12 +3,15 @@ package vault
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/dcadolph/midden/crypt"
+	"github.com/dcadolph/midden/internal/util"
 )
 
 // encryptToBytes returns the ciphertext bytes for plaintext using passphrase.
@@ -53,7 +56,7 @@ type Vault struct {
 	Dir string
 	// Passphrase, when non-empty, is used to encrypt and decrypt day files at rest.
 	// Callers set this with WithPassphrase after Open.
-	Passphrase string
+	Passphrase string `json:"-"`
 }
 
 // LockPath returns the absolute path to the vault advisory lock file.
@@ -67,10 +70,42 @@ func (v *Vault) MarkerPath() string {
 }
 
 // IsEncrypted reports whether the vault root carries the encryption marker.
-// It does not validate the passphrase; callers must verify with TryUnlock.
+// Stat failures other than "not exist" count as encrypted so an unreadable
+// marker can never cause plaintext writes into an encrypted vault.
+// It does not validate the passphrase; callers verify with VerifyPassphrase.
 func (v *Vault) IsEncrypted() bool {
 	_, err := os.Stat(v.MarkerPath())
-	return err == nil
+	if err == nil {
+		return true
+	}
+	return !os.IsNotExist(err)
+}
+
+// VerifyPassphrase decrypts the newest encrypted day file to prove the vault
+// passphrase is correct. A vault with no encrypted day files verifies trivially.
+func (v *Vault) VerifyPassphrase() error {
+	days, err := v.ListDays()
+	if err != nil {
+		return fmt.Errorf("list days: %w", err)
+	}
+	for i := len(days) - 1; i >= 0; i-- {
+		path := v.DayPath(days[i])
+		data, err := os.ReadFile(path) //nolint:gosec // Day path derives from the vault directory.
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("read day file %s: %w", path, err)
+		}
+		if !isEncryptedBytes(data) {
+			continue
+		}
+		if _, err := decryptFromBytes(v.Passphrase, data); err != nil {
+			return fmt.Errorf("passphrase does not unlock %s: %w", path, err)
+		}
+		return nil
+	}
+	return nil
 }
 
 // WithPassphrase returns a copy of the vault with the passphrase set.
@@ -127,7 +162,9 @@ func (v *Vault) DayPath(day time.Time) string {
 // EnsureDayFile creates the day file for the given local date if it does not exist.
 // The file is initialized with a single-line date header and, when the vault is
 // encrypted, the header is written through the encryption layer so the file at
-// rest stays sealed.
+// rest stays sealed. Before creating a file in an encrypted vault the passphrase
+// is verified so a typo cannot fork the vault across two keys. Creation is
+// exclusive, so racing processes cannot truncate each other's file.
 // It returns the absolute path to the file.
 func (v *Vault) EnsureDayFile(day time.Time) (string, error) {
 	path := v.DayPath(day)
@@ -136,11 +173,16 @@ func (v *Vault) EnsureDayFile(day time.Time) (string, error) {
 	} else if !os.IsNotExist(err) {
 		return "", fmt.Errorf("stat day file: %w", err)
 	}
+	if v.Passphrase != "" {
+		if err := v.VerifyPassphrase(); err != nil {
+			return "", err
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return "", fmt.Errorf("create day directory: %w", err)
 	}
 	header := fmt.Sprintf("# %s\n\n", day.Format("2006-01-02"))
-	if err := v.writeDayBytes(path, []byte(header)); err != nil {
+	if err := v.createDayFile(path, []byte(header)); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -158,20 +200,79 @@ func (v *Vault) ReadBytes(path string) ([]byte, error) {
 	return v.readDayBytes(path)
 }
 
-// writeDayBytes writes contents to path. When the vault carries a passphrase the
-// bytes are encrypted before being written.
-func (v *Vault) writeDayBytes(path string, contents []byte) error {
-	mode := os.FileMode(0o644)
-	if v.Passphrase != "" {
-		mode = 0o600
-		buf, err := encryptToBytes(v.Passphrase, contents)
-		if err != nil {
-			return err
-		}
-		contents = buf
+// sealed returns the on-disk bytes for contents, encrypting when the vault
+// carries a passphrase.
+func (v *Vault) sealed(contents []byte) ([]byte, error) {
+	if v.Passphrase == "" {
+		return contents, nil
 	}
-	if err := os.WriteFile(path, contents, mode); err != nil {
-		return fmt.Errorf("write day file %s: %w", path, err)
+	return encryptToBytes(v.Passphrase, contents)
+}
+
+// stageTemp writes payload to a synced temp file next to path and returns the
+// temp location. The caller renames or links it into place and removes it on failure.
+func stageTemp(path string, payload []byte) (string, error) {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".midden-tmp-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp day file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(payload); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("write temp day file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("sync temp day file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("close temp day file: %w", err)
+	}
+	return tmpPath, nil
+}
+
+// writeDayBytes writes contents to path atomically: the payload is staged in a
+// synced temp file in the same directory and renamed over path, so a crash can
+// never leave a truncated day file. Contents are encrypted first when the
+// vault carries a passphrase.
+func (v *Vault) writeDayBytes(path string, contents []byte) error {
+	payload, err := v.sealed(contents)
+	if err != nil {
+		return err
+	}
+	tmpPath, err := stageTemp(path, payload)
+	if err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("replace day file %s: %w", path, err)
+	}
+	return nil
+}
+
+// createDayFile writes contents to a brand-new file at path. The staged temp
+// file is linked into place, so creation is atomic and exclusive: when two
+// processes race, exactly one creates the file and the loser treats the
+// existing file as success.
+func (v *Vault) createDayFile(path string, contents []byte) error {
+	payload, err := v.sealed(contents)
+	if err != nil {
+		return err
+	}
+	tmpPath, err := stageTemp(path, payload)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := os.Link(tmpPath, path); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return nil
+		}
+		return fmt.Errorf("create day file %s: %w", path, err)
 	}
 	return nil
 }
@@ -208,16 +309,9 @@ func resolveDir(override string) (string, error) {
 	return filepath.Join(home, DefaultDir), nil
 }
 
-// absolute expands the path and converts it to an absolute path.
+// absolute expands a leading tilde and converts the path to an absolute path.
 func absolute(p string) (string, error) {
-	if len(p) > 0 && p[0] == '~' {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("user home: %w", err)
-		}
-		p = filepath.Join(home, p[1:])
-	}
-	abs, err := filepath.Abs(p)
+	abs, err := util.Absolute(p)
 	if err != nil {
 		return "", fmt.Errorf("absolute path: %w", err)
 	}

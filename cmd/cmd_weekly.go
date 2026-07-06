@@ -40,10 +40,10 @@ func runWeekly(cmd *cobra.Command, _ []string) error {
 	}
 	if len(entries) == 0 {
 		return errors.Join(ErrNotFound, fmt.Errorf("no entries between %s and %s",
-			start.Format("2006-01-02"), end.Format("2006-01-02")))
+			start.Format(layoutDate), end.Format(layoutDate)))
 	}
 	w := cmd.OutOrStdout()
-	fmt.Fprintf(w, "# Week of %s to %s\n\n", start.Format("2006-01-02"), end.Format("2006-01-02"))
+	fmt.Fprintf(w, "# Week of %s to %s\n\n", start.Format(layoutDate), end.Format(layoutDate))
 	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
 		dayEntries := entriesOnDay(entries, d)
 		if len(dayEntries) == 0 {

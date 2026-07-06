@@ -2,11 +2,10 @@
 package index
 
 import (
+	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
-	"os"
 	"sort"
 	"time"
 )
@@ -46,15 +45,11 @@ type Match struct {
 	Score float32
 }
 
-// Load reads an existing index file from disk.
-// A missing file returns a zero Index and a nil error.
-func Load(path string) (*Index, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // Index path derives from the vault directory.
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return &Index{}, nil
-		}
-		return nil, fmt.Errorf("read index: %w", err)
+// Decode parses index bytes produced by Encode.
+// Empty input returns a zero Index and a nil error.
+func Decode(data []byte) (*Index, error) {
+	if len(data) == 0 {
+		return &Index{}, nil
 	}
 	var idx Index
 	if err := json.Unmarshal(data, &idx); err != nil {
@@ -63,26 +58,16 @@ func Load(path string) (*Index, error) {
 	return &idx, nil
 }
 
-// Save writes the index to disk atomically.
-func (i *Index) Save(path string) error {
-	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // Index path derives from the vault directory.
-	if err != nil {
-		return fmt.Errorf("open temp index: %w", err)
-	}
-	enc := json.NewEncoder(f)
+// Encode renders the index as JSON bytes. Callers persist the bytes through
+// the vault so encrypted vaults keep the index sealed at rest.
+func (i *Index) Encode() ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(i); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("encode index: %w", err)
+		return nil, fmt.Errorf("encode index: %w", err)
 	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("close temp index: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("rename temp index: %w", err)
-	}
-	return nil
+	return buf.Bytes(), nil
 }
 
 // Search returns the top-k entries by cosine similarity to the query vector.

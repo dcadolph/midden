@@ -1,14 +1,13 @@
 package llm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
+	"strconv"
+	"strings"
 )
 
 // Message is one chat turn supplied to Chatter.Reply.
@@ -19,6 +18,9 @@ type Message struct {
 	Content string
 }
 
+// truncationNotice is appended to replies the provider cut off at its token limit.
+const truncationNotice = "\n[Reply truncated at the provider token limit.]"
+
 // Chatter produces an assistant reply given a system prompt and conversation history.
 type Chatter interface {
 	// Reply returns the assistant text for the given history.
@@ -28,7 +30,8 @@ type Chatter interface {
 }
 
 // ChatterFromEnv selects a chat provider using documented environment precedence.
-// ANTHROPIC_API_KEY → Claude, OPENAI_API_KEY → OpenAI, OLLAMA_HOST → local Ollama.
+// ANTHROPIC_API_KEY → Claude, OPENAI_API_KEY → OpenAI, then a configured or
+// reachable Ollama daemon. MIDDEN_CHAT_PROVIDER short-circuits autodetection.
 func ChatterFromEnv() (Chatter, error) {
 	provider := os.Getenv("MIDDEN_CHAT_PROVIDER")
 	switch provider {
@@ -48,16 +51,42 @@ func ChatterFromEnv() (Chatter, error) {
 	if os.Getenv("OPENAI_API_KEY") != "" {
 		return newOpenAIChat()
 	}
-	if isOllamaReachable() {
+	if os.Getenv("OLLAMA_HOST") != "" || isOllamaReachable() {
 		return newOllamaChat()
 	}
 	return nil, errors.New("no chat provider configured: set ANTHROPIC_API_KEY, OPENAI_API_KEY, or run ollama locally")
 }
 
+// chatMaxTokens returns the reply token budget from MIDDEN_CHAT_MAX_TOKENS or the default.
+func chatMaxTokens() int {
+	if v := os.Getenv(EnvChatMaxTokens); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultChatMaxTokens
+}
+
+// roleMaps renders an optional system turn plus history as provider wire messages.
+func roleMaps(system string, history []Message) []map[string]string {
+	msgs := make([]map[string]string, 0, len(history)+1)
+	if system != "" {
+		msgs = append(msgs, map[string]string{"role": "system", "content": system})
+	}
+	for _, m := range history {
+		msgs = append(msgs, map[string]string{"role": m.Role, "content": m.Content})
+	}
+	return msgs
+}
+
 // anthropicChat implements Chatter against the Anthropic messages API.
 type anthropicChat struct {
+	// apiKey authenticates requests; never logged or serialized.
 	apiKey string
-	model  string
+	// model is the model ID sent with every request.
+	model string
+	// maxTokens caps the reply length.
+	maxTokens int
 }
 
 func newAnthropicChat() (*anthropicChat, error) {
@@ -67,45 +96,28 @@ func newAnthropicChat() (*anthropicChat, error) {
 	}
 	model := os.Getenv("ANTHROPIC_MODEL")
 	if model == "" {
-		model = "claude-sonnet-4-6"
+		model = defaultAnthropicModel
 	}
-	return &anthropicChat{apiKey: key, model: model}, nil
+	return &anthropicChat{apiKey: key, model: model, maxTokens: chatMaxTokens()}, nil
 }
 
 func (c *anthropicChat) Name() string { return "anthropic:" + c.model }
 
 func (c *anthropicChat) Reply(ctx context.Context, system string, history []Message) (string, error) {
-	msgs := make([]map[string]string, len(history))
-	for i, m := range history {
-		msgs[i] = map[string]string{"role": m.Role, "content": m.Content}
-	}
-	body, err := json.Marshal(map[string]any{
-		"model":      c.model,
-		"max_tokens": 1024,
-		"system":     system,
-		"messages":   msgs,
-	})
+	data, err := postJSON(ctx, "anthropic messages", "https://api.anthropic.com/v1/messages",
+		map[string]string{"x-api-key": c.apiKey, "anthropic-version": "2023-06-01"},
+		map[string]any{
+			"model":      c.model,
+			"max_tokens": c.maxTokens,
+			"system":     system,
+			"messages":   roleMaps("", history),
+		})
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.anthropic.com/v1/messages", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", c.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-	resp, err := httpDo(req)
-	if err != nil {
-		return "", fmt.Errorf("do request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("anthropic messages: %s: %s", resp.Status, string(data))
+		return "", err
 	}
 	var parsed struct {
-		Content []struct {
+		StopReason string `json:"stop_reason"`
+		Content    []struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`
@@ -113,19 +125,25 @@ func (c *anthropicChat) Reply(ctx context.Context, system string, history []Mess
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return "", fmt.Errorf("decode response: %w", err)
 	}
-	var buf bytes.Buffer
+	var b strings.Builder
 	for _, p := range parsed.Content {
 		if p.Type == "text" {
-			buf.WriteString(p.Text)
+			b.WriteString(p.Text)
 		}
 	}
-	return buf.String(), nil
+	reply := b.String()
+	if parsed.StopReason == "max_tokens" {
+		reply += truncationNotice
+	}
+	return reply, nil
 }
 
 // openAIChat implements Chatter against the OpenAI Chat Completions endpoint.
 type openAIChat struct {
+	// apiKey authenticates requests; never logged or serialized.
 	apiKey string
-	model  string
+	// model is the model ID sent with every request.
+	model string
 }
 
 func newOpenAIChat() (*openAIChat, error) {
@@ -135,7 +153,7 @@ func newOpenAIChat() (*openAIChat, error) {
 	}
 	model := os.Getenv("OPENAI_CHAT_MODEL")
 	if model == "" {
-		model = "gpt-4o-mini"
+		model = defaultOpenAIChatModel
 	}
 	return &openAIChat{apiKey: key, model: model}, nil
 }
@@ -143,35 +161,16 @@ func newOpenAIChat() (*openAIChat, error) {
 func (c *openAIChat) Name() string { return "openai:" + c.model }
 
 func (c *openAIChat) Reply(ctx context.Context, system string, history []Message) (string, error) {
-	msgs := make([]map[string]string, 0, len(history)+1)
-	if system != "" {
-		msgs = append(msgs, map[string]string{"role": "system", "content": system})
-	}
-	for _, m := range history {
-		msgs = append(msgs, map[string]string{"role": m.Role, "content": m.Content})
-	}
-	body, err := json.Marshal(map[string]any{"model": c.model, "messages": msgs})
+	data, err := postJSON(ctx, "openai chat", "https://api.openai.com/v1/chat/completions",
+		map[string]string{"Authorization": "Bearer " + c.apiKey},
+		map[string]any{"model": c.model, "messages": roleMaps(system, history)})
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	resp, err := httpDo(req)
-	if err != nil {
-		return "", fmt.Errorf("do request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("openai chat: %s: %s", resp.Status, string(data))
+		return "", err
 	}
 	var parsed struct {
 		Choices []struct {
-			Message struct {
+			FinishReason string `json:"finish_reason"`
+			Message      struct {
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
@@ -182,62 +181,49 @@ func (c *openAIChat) Reply(ctx context.Context, system string, history []Message
 	if len(parsed.Choices) == 0 {
 		return "", errors.New("openai chat returned no choices")
 	}
-	return parsed.Choices[0].Message.Content, nil
+	reply := parsed.Choices[0].Message.Content
+	if parsed.Choices[0].FinishReason == "length" {
+		reply += truncationNotice
+	}
+	return reply, nil
 }
 
 // ollamaChat implements Chatter against a local Ollama daemon.
 type ollamaChat struct {
-	host  string
+	// host is the Ollama base URL.
+	host string
+	// model is the model name sent with every request.
 	model string
 }
 
 func newOllamaChat() (*ollamaChat, error) {
-	host := os.Getenv("OLLAMA_HOST")
-	if host == "" {
-		host = "http://localhost:11434"
-	}
 	model := os.Getenv("OLLAMA_CHAT_MODEL")
 	if model == "" {
-		model = "llama3.2"
+		model = defaultOllamaChatModel
 	}
-	return &ollamaChat{host: host, model: model}, nil
+	return &ollamaChat{host: ollamaHost(), model: model}, nil
 }
 
 func (c *ollamaChat) Name() string { return "ollama:" + c.model }
 
 func (c *ollamaChat) Reply(ctx context.Context, system string, history []Message) (string, error) {
-	msgs := make([]map[string]string, 0, len(history)+1)
-	if system != "" {
-		msgs = append(msgs, map[string]string{"role": "system", "content": system})
-	}
-	for _, m := range history {
-		msgs = append(msgs, map[string]string{"role": m.Role, "content": m.Content})
-	}
-	body, err := json.Marshal(map[string]any{"model": c.model, "messages": msgs, "stream": false})
+	data, err := postJSON(ctx, "ollama chat", c.host+"/api/chat", nil,
+		map[string]any{"model": c.model, "messages": roleMaps(system, history), "stream": false})
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.host+"/api/chat", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpDo(req)
-	if err != nil {
-		return "", fmt.Errorf("do request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("ollama chat: %s: %s", resp.Status, string(data))
+		return "", err
 	}
 	var parsed struct {
-		Message struct {
+		DoneReason string `json:"done_reason"`
+		Message    struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	}
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return "", fmt.Errorf("decode response: %w", err)
 	}
-	return parsed.Message.Content, nil
+	reply := parsed.Message.Content
+	if parsed.DoneReason == "length" {
+		reply += truncationNotice
+	}
+	return reply, nil
 }

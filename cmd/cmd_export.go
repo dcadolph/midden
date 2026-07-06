@@ -56,7 +56,7 @@ func exportAsJSON(w io.Writer, v *vault.Vault, days []time.Time) error {
 	for _, d := range days {
 		entries, err := v.ReadDay(d)
 		if err != nil {
-			return errors.Join(ErrVault, fmt.Errorf("read day %s: %w", d.Format("2006-01-02"), err))
+			return errors.Join(ErrVault, fmt.Errorf("read day %s: %w", d.Format(layoutDate), err))
 		}
 		all = append(all, entriesToJSON(entries)...)
 	}
@@ -70,7 +70,7 @@ func exportAsJSONL(w io.Writer, v *vault.Vault, days []time.Time) error {
 	for _, d := range days {
 		entries, err := v.ReadDay(d)
 		if err != nil {
-			return errors.Join(ErrVault, fmt.Errorf("read day %s: %w", d.Format("2006-01-02"), err))
+			return errors.Join(ErrVault, fmt.Errorf("read day %s: %w", d.Format(layoutDate), err))
 		}
 		for _, j := range entriesToJSON(entries) {
 			if err := enc.Encode(j); err != nil {
@@ -87,7 +87,7 @@ func exportAsMarkdown(w io.Writer, v *vault.Vault, days []time.Time) error {
 		path := v.DayPath(d)
 		data, err := v.ReadBytes(path)
 		if err != nil {
-			return errors.Join(ErrVault, fmt.Errorf("read day %s: %w", d.Format("2006-01-02"), err))
+			return errors.Join(ErrVault, fmt.Errorf("read day %s: %w", d.Format(layoutDate), err))
 		}
 		if _, err := w.Write(data); err != nil {
 			return fmt.Errorf("write markdown: %w", err)

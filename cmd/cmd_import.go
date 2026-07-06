@@ -50,7 +50,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 	if err := v.Append(vault.Entry{Time: when, Tags: entryTags(importTags), Body: body}); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("append imported entry: %w", err))
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Imported %s into %s\n", args[0], when.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(cmd.OutOrStdout(), "Imported %s into %s\n", args[0], when.Format(layoutDateTime))
 	return nil
 }
 

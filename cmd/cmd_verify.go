@@ -33,10 +33,10 @@ func runVerify(cmd *cobra.Command, _ []string) error {
 		entries, err := v.ReadDay(d)
 		if err != nil {
 			failures++
-			fmt.Fprintf(cmd.OutOrStdout(), "FAIL %s: %v\n", d.Format("2006-01-02"), err)
+			fmt.Fprintf(cmd.OutOrStdout(), "FAIL %s: %v\n", d.Format(layoutDate), err)
 			continue
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "ok   %s: %d entries\n", d.Format("2006-01-02"), len(entries))
+		fmt.Fprintf(cmd.OutOrStdout(), "ok   %s: %d entries\n", d.Format(layoutDate), len(entries))
 	}
 	if failures > 0 {
 		return errors.Join(ErrVault, fmt.Errorf("%d file(s) failed to parse", failures))

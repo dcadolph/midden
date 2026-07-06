@@ -2,16 +2,21 @@
 package util
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// ExpandHome rewrites a leading tilde to the user home directory.
+// ExpandHome rewrites a leading "~" or "~/" to the user home directory.
+// Named-user forms like "~alice" are rejected rather than silently misresolved.
 // A path that does not start with a tilde is returned unchanged.
 func ExpandHome(p string) (string, error) {
 	if p == "" || p[0] != '~' {
 		return p, nil
+	}
+	if len(p) > 1 && p[1] != '/' && p[1] != filepath.Separator {
+		return "", fmt.Errorf("cannot expand user-specific home path %q", p)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
