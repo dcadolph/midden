@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -62,7 +61,7 @@ func runConfigShow(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	if _, err := os.Stdout.Write(data); err != nil {
+	if _, err := w.Write(data); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil

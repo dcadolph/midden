@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -55,7 +53,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	if err := v.Append(entry); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("append entry: %w", err))
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Appended entry at %s\n", entry.Time.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(cmd.OutOrStdout(), "Appended entry at %s\n", entry.Time.Format(layoutDateTime))
 	return nil
 }
 
@@ -93,12 +91,8 @@ func readBodyFromEditor() (string, error) {
 		return "", fmt.Errorf("close temp file: %w", err)
 	}
 
-	c := exec.Command(editor, path) //nolint:gosec // Editor comes from user config or environment.
-	c.Stdin = os.Stdin
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	if err := c.Run(); err != nil {
-		return "", errors.Join(ErrEditor, fmt.Errorf("editor %s exited: %w", filepath.Base(editor), err))
+	if err := runEditor(editor, path); err != nil {
+		return "", err
 	}
 	data, err := os.ReadFile(path) //nolint:gosec // Temp file created above.
 	if err != nil {

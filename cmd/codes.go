@@ -14,4 +14,8 @@ const (
 	ExitNotFound = 4
 	// ExitEditor indicates the user editor exited non-zero.
 	ExitEditor = 5
+	// ExitLLM indicates an embedding or chat provider failure.
+	ExitLLM = 6
+	// ExitGit indicates a git repository operation failure.
+	ExitGit = 7
 )

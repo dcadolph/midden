@@ -21,8 +21,9 @@ func init() {
 }
 
 // runPath prints either the vault root or the resolved day file path.
+// It opens the vault without unlocking so printing a path never prompts for a passphrase.
 func runPath(cmd *cobra.Command, args []string) error {
-	v, err := openVault()
+	v, err := openVaultRaw()
 	if err != nil {
 		return err
 	}

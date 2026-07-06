@@ -53,8 +53,8 @@ func runStats(cmd *cobra.Command, _ []string) error {
 	fmt.Fprintf(w, "  Tags:    %d\n", s.Tags)
 	if !s.FirstEntry.IsZero() {
 		heading("Span")
-		fmt.Fprintf(w, "  First: %s\n", s.FirstEntry.Format("2006-01-02 15:04:05"))
-		fmt.Fprintf(w, "  Last:  %s\n", s.LastEntry.Format("2006-01-02 15:04:05"))
+		fmt.Fprintf(w, "  First: %s\n", s.FirstEntry.Format(layoutDateTime))
+		fmt.Fprintf(w, "  Last:  %s\n", s.LastEntry.Format(layoutDateTime))
 	}
 	if len(s.TopTags) > 0 {
 		heading("Top tags")

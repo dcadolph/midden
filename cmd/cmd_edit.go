@@ -46,52 +46,70 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	}
 	editor := chooseEditor()
 	if v.Passphrase == "" {
-		c := exec.Command(editor, path) //nolint:gosec // Editor comes from user config or environment.
-		c.Stdin = os.Stdin
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
-		if err := c.Run(); err != nil {
-			return errors.Join(ErrEditor, fmt.Errorf("editor %s exited: %w", filepath.Base(editor), err))
-		}
-		return nil
+		return runEditor(editor, path)
 	}
 	return editEncryptedDay(v, path, editor)
 }
 
-// editEncryptedDay decrypts the day file to a temp file inside the vault, runs the editor,
-// re-encrypts the result back into the day file, and removes the temp file.
-func editEncryptedDay(v vaultEditor, path, editor string) error {
-	plain, err := v.ReadBytes(path)
-	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("decrypt %s: %w", path, err))
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".midden-edit-*.md")
-	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("create temp file: %w", err))
-	}
-	tmpPath := tmp.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
-	if _, err := tmp.Write(plain); err != nil {
-		_ = tmp.Close()
-		return errors.Join(ErrVault, fmt.Errorf("write temp file: %w", err))
-	}
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return errors.Join(ErrVault, fmt.Errorf("chmod temp file: %w", err))
-	}
-	if err := tmp.Close(); err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("close temp file: %w", err))
-	}
-	c := exec.Command(editor, tmpPath) //nolint:gosec // Editor comes from user config or environment.
+// runEditor opens path in the given editor wired to the current terminal.
+func runEditor(editor, path string) error {
+	c := exec.Command(editor, path) //nolint:gosec // Editor comes from user config or environment.
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	if err := c.Run(); err != nil {
 		return errors.Join(ErrEditor, fmt.Errorf("editor %s exited: %w", filepath.Base(editor), err))
 	}
+	return nil
+}
+
+// editEncryptedDay decrypts the day file to a private temp file outside the
+// vault, runs the editor, re-encrypts the result back into the day file, and
+// removes the temp file. When the day file changes on disk while the editor is
+// open (for example a concurrent append), the re-encrypt is refused and the
+// edited plaintext is kept for manual recovery instead of clobbering the change.
+func editEncryptedDay(v vaultEditor, path, editor string) error {
+	plain, err := v.ReadBytes(path)
+	if err != nil {
+		return errors.Join(ErrVault, fmt.Errorf("decrypt %s: %w", path, err))
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		return errors.Join(ErrVault, fmt.Errorf("stat %s: %w", path, err))
+	}
+	tmp, err := os.CreateTemp("", ".midden-edit-*.md")
+	if err != nil {
+		return errors.Join(ErrVault, fmt.Errorf("create temp file: %w", err))
+	}
+	tmpPath := tmp.Name()
+	keepTmp := false
+	defer func() {
+		if !keepTmp {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := tmp.Write(plain); err != nil {
+		_ = tmp.Close()
+		return errors.Join(ErrVault, fmt.Errorf("write temp file: %w", err))
+	}
+	if err := tmp.Close(); err != nil {
+		return errors.Join(ErrVault, fmt.Errorf("close temp file: %w", err))
+	}
+	if err := runEditor(editor, tmpPath); err != nil {
+		return err
+	}
 	updated, err := os.ReadFile(tmpPath) //nolint:gosec // Temp file created above.
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("read temp file: %w", err))
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		return errors.Join(ErrVault, fmt.Errorf("stat %s: %w", path, err))
+	}
+	if !after.ModTime().Equal(before.ModTime()) || after.Size() != before.Size() {
+		keepTmp = true
+		return errors.Join(ErrVault, fmt.Errorf(
+			"day file %s changed while the editor was open; your edit is preserved at %s", path, tmpPath))
 	}
 	if err := v.WriteBytes(path, updated); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("write %s: %w", path, err))

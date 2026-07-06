@@ -99,11 +99,28 @@ func tryAgo(s string, today time.Time) (time.Time, bool) {
 	case "week", "weeks":
 		return today.AddDate(0, 0, -7*n), true
 	case "month", "months":
-		return today.AddDate(0, -n, 0), true
+		return addMonthsClamped(today, -n), true
 	case "year", "years":
-		return today.AddDate(-n, 0, 0), true
+		return addMonthsClamped(today, -12*n), true
 	}
 	return time.Time{}, false
+}
+
+// addMonthsClamped shifts t by delta months, clamping the day of month to the
+// last day of the target month so overflow never spills into the following
+// month (Mar 31 minus one month yields Feb 28, not Mar 3).
+func addMonthsClamped(t time.Time, delta int) time.Time {
+	first := time.Date(t.Year(), time.Month(int(t.Month())+delta), 1, 0, 0, 0, 0, t.Location())
+	day := t.Day()
+	if last := daysInMonth(first); day > last {
+		day = last
+	}
+	return time.Date(first.Year(), first.Month(), day, 0, 0, 0, 0, t.Location())
+}
+
+// daysInMonth returns the number of days in the month containing t.
+func daysInMonth(t time.Time) int {
+	return time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, t.Location()).Day()
 }
 
 // weekday converts a lowercase day name into a time.Weekday.

@@ -63,6 +63,8 @@ func (v *Vault) Append(entry Entry) error {
 // Serialize renders the entry as the markdown block written to a day file.
 // The block begins with a level-two header carrying the time and tags
 // and ends with a trailing blank line so successive entries stay separated.
+// Body lines that would parse as day or entry headers are prefixed with one
+// space so serialize-parse round trips never invent or drop entries.
 func (e Entry) Serialize() string {
 	var b strings.Builder
 	b.WriteString("## ")
@@ -72,9 +74,23 @@ func (e Entry) Serialize() string {
 		b.WriteString(t)
 	}
 	b.WriteString("\n")
-	b.WriteString(strings.TrimRight(e.Body, " \t\n"))
+	for i, line := range strings.Split(strings.TrimRight(e.Body, " \t\n"), "\n") {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(escapeBodyLine(line))
+	}
 	b.WriteString("\n\n")
 	return b.String()
+}
+
+// escapeBodyLine prefixes a space when the line would otherwise be misread as
+// a day or entry header during parsing.
+func escapeBodyLine(line string) string {
+	if dayHeaderRe.MatchString(line) || entryHeaderRe.MatchString(line) {
+		return " " + line
+	}
+	return line
 }
 
 // HasTag reports whether the entry carries the given tag, compared case-insensitively.

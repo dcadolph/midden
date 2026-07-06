@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -31,13 +30,16 @@ func init() {
 
 // runReindex walks every entry, embeds the body, and writes the index to disk.
 func runReindex(cmd *cobra.Command, _ []string) error {
+	if reindexBatch < 1 {
+		return fmt.Errorf("--batch must be at least 1")
+	}
 	v, err := openVault()
 	if err != nil {
 		return err
 	}
 	emb, err := llm.EmbedderFromEnv()
 	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("pick embedder: %w", err))
+		return errors.Join(ErrLLM, fmt.Errorf("pick embedder: %w", err))
 	}
 	entries, err := allEntries(v)
 	if err != nil {
@@ -55,7 +57,7 @@ func runReindex(cmd *cobra.Command, _ []string) error {
 		}
 		vecs, err := emb.Embed(ctx, texts)
 		if err != nil {
-			return errors.Join(ErrVault, fmt.Errorf("embed batch: %w", err))
+			return errors.Join(ErrLLM, fmt.Errorf("embed batch: %w", err))
 		}
 		for i, vec := range vecs {
 			idx.Entries = append(idx.Entries, index.Entry{
@@ -70,7 +72,7 @@ func runReindex(cmd *cobra.Command, _ []string) error {
 	if len(idx.Entries) > 0 {
 		idx.Dim = len(idx.Entries[0].Embedding)
 	}
-	if err := idx.Save(filepath.Join(v.Dir, index.Filename)); err != nil {
+	if err := saveIndex(v, idx); err != nil {
 		return errors.Join(ErrVault, err)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Wrote index with %d entries via %s\n", len(idx.Entries), emb.Name())

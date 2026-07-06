@@ -25,16 +25,20 @@ var passphraseFlag string
 // resolvePassphrase returns the vault passphrase using the documented precedence:
 // the --passphrase flag, MIDDEN_PASSPHRASE, the OS keychain when enabled in
 // config, then an interactive prompt against the controlling terminal.
+// Flag, environment, and keychain values are trimmed and must be non-empty.
+// The flag value is zeroed once read to shorten its stay in memory.
 func resolvePassphrase(prompt string) (string, error) {
 	if passphraseFlag != "" {
-		return passphraseFlag, nil
+		pass, err := trimmedPassphrase("flag", passphraseFlag)
+		passphraseFlag = ""
+		return pass, err
 	}
 	if env := os.Getenv(EnvPassphrase); env != "" {
-		return env, nil
+		return trimmedPassphrase("environment", env)
 	}
 	if keychainEnabled() {
 		if pass, err := keyring.GetVaultPassphrase(); err == nil {
-			return pass, nil
+			return trimmedPassphrase("keychain", pass)
 		} else if !errors.Is(err, keyring.ErrNotFound) {
 			return "", fmt.Errorf("read keychain: %w", err)
 		}
@@ -44,13 +48,16 @@ func resolvePassphrase(prompt string) (string, error) {
 
 // resolvePassphraseWithConfirm reads a new passphrase from the controlling terminal twice
 // and verifies they match. Flag and environment values bypass the confirmation step
-// because callers using them are running unattended.
+// because callers using them are running unattended; both are trimmed and must
+// be non-empty, and the flag value is zeroed once read.
 func resolvePassphraseWithConfirm(prompt string) (string, error) {
 	if passphraseFlag != "" {
-		return passphraseFlag, nil
+		pass, err := trimmedPassphrase("flag", passphraseFlag)
+		passphraseFlag = ""
+		return pass, err
 	}
 	if env := os.Getenv(EnvPassphrase); env != "" {
-		return env, nil
+		return trimmedPassphrase("environment", env)
 	}
 	first, err := readPassphraseFromTerminal(prompt)
 	if err != nil {
@@ -67,6 +74,16 @@ func resolvePassphraseWithConfirm(prompt string) (string, error) {
 		return "", errors.New("passphrase is empty")
 	}
 	return first, nil
+}
+
+// trimmedPassphrase trims surrounding whitespace from a non-interactive
+// passphrase source and rejects values that trim to nothing.
+func trimmedPassphrase(source, pass string) (string, error) {
+	pass = strings.TrimSpace(pass)
+	if pass == "" {
+		return "", fmt.Errorf("%s passphrase is empty", source)
+	}
+	return pass, nil
 }
 
 // readPassphraseFromTerminal prompts the user on stderr and reads a passphrase

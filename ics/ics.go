@@ -1,8 +1,12 @@
 // Package ics parses the small iCalendar subset midden ingests from local .ics exports.
 //
-// The parser handles line folding, plain VEVENT records, and SUMMARY, DTSTART,
-// DTEND, LOCATION, and DESCRIPTION properties. TZID parameters are ignored;
-// floating times are treated as local. UTC suffix Z is honored.
+// The parser handles line folding, VEVENT records, and the SUMMARY, DTSTART,
+// DTEND, LOCATION, DESCRIPTION, UID, and RRULE properties. Components nested
+// inside a VEVENT (VALARM and friends) are skipped so their properties never
+// touch the parent event. TZID parameters resolve through time.LoadLocation
+// with a fallback to the machine's local zone; the UTC suffix Z is honored.
+// Parsed times are anchored to the local zone. Events whose DTSTART is
+// missing or unparseable are dropped and counted rather than returned.
 package ics
 
 import (
@@ -15,6 +19,8 @@ import (
 
 // Event is a single calendar entry.
 type Event struct {
+	// UID is the calendar-assigned unique identifier, or empty when absent.
+	UID string
 	// Summary is the event title.
 	Summary string
 	// Start is the local-anchored start time.
@@ -25,30 +31,51 @@ type Event struct {
 	Location string
 	// Description is the optional event body.
 	Description string
+	// AllDay reports whether DTSTART carried a date-only value.
+	AllDay bool
+	// Recurs reports whether the event carries an RRULE. Recurrences are not expanded.
+	Recurs bool
 }
 
-// Parse reads an iCalendar stream and returns every VEVENT it contains.
-func Parse(r io.Reader) ([]Event, error) {
+// Parse reads an iCalendar stream and returns every VEVENT it contains plus
+// the number of events dropped because DTSTART was missing or unparseable.
+func Parse(r io.Reader) ([]Event, int, error) {
 	lines, err := unfold(r)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	var events []Event
 	var current *Event
+	depth := 0
+	skipped := 0
 	for _, line := range lines {
-		switch {
-		case line == "BEGIN:VEVENT":
-			current = &Event{}
-		case line == "END:VEVENT":
-			if current != nil {
-				events = append(events, *current)
-				current = nil
+		upper := strings.ToUpper(line)
+		if current == nil {
+			if upper == "BEGIN:VEVENT" {
+				current = &Event{}
+				depth = 0
 			}
-		case current != nil:
+			continue
+		}
+		switch {
+		case strings.HasPrefix(upper, "BEGIN:"):
+			depth++
+		case upper == "END:VEVENT" && depth == 0:
+			if current.Start.IsZero() {
+				skipped++
+			} else {
+				events = append(events, *current)
+			}
+			current = nil
+		case strings.HasPrefix(upper, "END:"):
+			if depth > 0 {
+				depth--
+			}
+		case depth == 0:
 			applyProperty(current, line)
 		}
 	}
-	return events, nil
+	return events, skipped, nil
 }
 
 // unfold reads the stream and merges folded continuation lines back into single logical lines.
@@ -95,12 +122,17 @@ func applyProperty(e *Event, line string) {
 		e.Location = unescape(value)
 	case "DESCRIPTION":
 		e.Description = unescape(value)
+	case "UID":
+		e.UID = unescape(value)
+	case "RRULE":
+		e.Recurs = true
 	case "DTSTART":
-		if t, ok := parseTime(value, params); ok {
+		if t, allDay, ok := parseTime(value, params); ok {
 			e.Start = t
+			e.AllDay = allDay
 		}
 	case "DTEND":
-		if t, ok := parseTime(value, params); ok {
+		if t, _, ok := parseTime(value, params); ok {
 			e.End = t
 		}
 	}
@@ -120,43 +152,92 @@ func splitProperty(line string) (string, string, string, bool) {
 	return head, "", value, true
 }
 
-// parseTime accepts the date-time and date forms midden cares about.
-func parseTime(value, params string) (time.Time, bool) {
+// parseTime accepts the date-time and date forms midden cares about. It
+// returns the parsed time, whether the value was date-only, and success.
+func parseTime(value, params string) (time.Time, bool, bool) {
 	if isDateOnly(params, value) {
 		t, err := time.ParseInLocation("20060102", value, time.Local)
 		if err != nil {
-			return time.Time{}, false
+			return time.Time{}, false, false
 		}
-		return t, true
+		return t, true, true
 	}
 	if strings.HasSuffix(value, "Z") {
 		t, err := time.Parse("20060102T150405Z", value)
 		if err != nil {
-			return time.Time{}, false
+			return time.Time{}, false, false
 		}
-		return t.Local(), true
+		return t.Local(), false, true
 	}
-	t, err := time.ParseInLocation("20060102T150405", value, time.Local)
+	t, err := time.ParseInLocation("20060102T150405", value, location(params))
 	if err != nil {
-		return time.Time{}, false
+		return time.Time{}, false, false
 	}
-	return t, true
+	return t.In(time.Local), false, true
 }
 
-// isDateOnly reports whether the property uses VALUE=DATE or a bare YYYYMMDD value.
+// location resolves the TZID parameter to a time.Location, falling back to the
+// machine's local zone when the parameter is absent or the zone is unknown.
+func location(params string) *time.Location {
+	tzid := paramValue(params, "TZID")
+	if tzid == "" {
+		return time.Local
+	}
+	loc, err := time.LoadLocation(tzid)
+	if err != nil {
+		return time.Local
+	}
+	return loc
+}
+
+// isDateOnly reports whether the property is date-only. An explicit VALUE
+// parameter is trusted; a bare eight-character value is the fallback.
 func isDateOnly(params, value string) bool {
-	if strings.Contains(strings.ToUpper(params), "VALUE=DATE") {
-		return true
+	if v := paramValue(params, "VALUE"); v != "" {
+		return strings.EqualFold(v, "DATE")
 	}
 	return len(value) == 8
 }
 
-// unescape rewrites the small set of iCalendar text escapes.
+// paramValue returns the named parameter's value from the raw parameter
+// string with surrounding quotes removed, or empty when the parameter is absent.
+func paramValue(params, name string) string {
+	for p := range strings.SplitSeq(params, ";") {
+		k, v, ok := strings.Cut(p, "=")
+		if !ok {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(k), name) {
+			return strings.Trim(v, `"`)
+		}
+	}
+	return ""
+}
+
+// unescape rewrites the iCalendar text escapes in a single pass so an escaped
+// backslash never re-forms an escape sequence with the character after it.
 func unescape(s string) string {
-	s = strings.ReplaceAll(s, `\n`, "\n")
-	s = strings.ReplaceAll(s, `\N`, "\n")
-	s = strings.ReplaceAll(s, `\,`, ",")
-	s = strings.ReplaceAll(s, `\;`, ";")
-	s = strings.ReplaceAll(s, `\\`, `\`)
-	return s
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c != '\\' || i+1 == len(s) {
+			b.WriteByte(c)
+			continue
+		}
+		i++
+		switch s[i] {
+		case '\\', ';', ',':
+			b.WriteByte(s[i])
+		case 'n', 'N':
+			b.WriteByte('\n')
+		default:
+			b.WriteByte('\\')
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
 }

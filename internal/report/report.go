@@ -13,7 +13,10 @@ import (
 )
 
 //go:embed templates/*.html
-var templates embed.FS
+var templatesFS embed.FS
+
+// reportTemplate is the report page template, parsed once at package load.
+var reportTemplate = template.Must(template.ParseFS(templatesFS, "templates/report.html"))
 
 // CalendarCell is one square in the heatmap.
 type CalendarCell struct {
@@ -55,8 +58,6 @@ type Data struct {
 	Streak int
 	// Calendar holds one CalendarCell per day in the heatmap window.
 	Calendar []CalendarCell
-	// CalCols is the column count used by the heatmap grid (always 7).
-	CalCols int
 	// Tags holds the top tag bars.
 	Tags []TagBar
 	// Days holds one row per day with entries on it.
@@ -65,11 +66,7 @@ type Data struct {
 
 // Render writes the HTML report to w using the supplied template data.
 func Render(w io.Writer, data Data) error {
-	t, err := template.ParseFS(templates, "templates/report.html")
-	if err != nil {
-		return fmt.Errorf("parse template: %w", err)
-	}
-	if err := t.Execute(w, data); err != nil {
+	if err := reportTemplate.Execute(w, data); err != nil {
 		return fmt.Errorf("execute template: %w", err)
 	}
 	return nil
@@ -80,21 +77,21 @@ func Render(w io.Writer, data Data) error {
 func Build(title string, v *vault.Vault, now time.Time, topTags int) (Data, error) {
 	stats, err := v.ComputeStats(topTags)
 	if err != nil {
-		return Data{}, err
+		return Data{}, fmt.Errorf("compute stats: %w", err)
 	}
 	streak, err := v.Streak(now)
 	if err != nil {
-		return Data{}, err
+		return Data{}, fmt.Errorf("compute streak: %w", err)
 	}
 	days, err := v.ListDays()
 	if err != nil {
-		return Data{}, err
+		return Data{}, fmt.Errorf("list days: %w", err)
 	}
 	counts := map[string]dayMetric{}
 	for _, d := range days {
 		entries, err := v.ReadDay(d)
 		if err != nil {
-			return Data{}, err
+			return Data{}, fmt.Errorf("read day %s: %w", d.Format("2006-01-02"), err)
 		}
 		key := d.Format("2006-01-02")
 		m := counts[key]
@@ -104,32 +101,33 @@ func Build(title string, v *vault.Vault, now time.Time, topTags int) (Data, erro
 		}
 		counts[key] = m
 	}
-	cal := buildCalendar(counts, now)
-	rows := buildDayRows(days, counts)
 	return Data{
 		Title:    title,
 		Stats:    stats,
 		Streak:   streak,
-		Calendar: cal,
-		CalCols:  7,
+		Calendar: buildCalendar(counts, now),
 		Tags:     buildTagBars(stats.TopTags),
-		Days:     rows,
+		Days:     buildDayRows(days, counts),
 	}, nil
 }
 
 // dayMetric pairs entry count and word count for a single day.
 type dayMetric struct {
+	// Entries is the entry count on the day.
 	Entries int
-	Words   int
+	// Words is the whitespace-separated word count on the day.
+	Words int
 }
 
-// buildCalendar emits a year-back heatmap ending at the start of the week containing now.
-// Cells are ordered week-first then day-of-week so the CSS grid renders columns of seven.
+// buildCalendar emits a GitHub-style heatmap covering the year ending at now.
+// The window starts on the Sunday on or before one year ago and ends on the
+// Saturday of the week containing now, so the cell count is a multiple of
+// seven and cells flow column-major: one week per column, one weekday per row.
 func buildCalendar(counts map[string]dayMetric, now time.Time) []CalendarCell {
-	end := startOfWeek(now)
-	start := end.AddDate(-1, 0, 0)
+	start := startOfWeek(now.AddDate(-1, 0, 0))
+	end := startOfWeek(now).AddDate(0, 0, 6)
 	var cells []CalendarCell
-	for d := start; !d.After(end.AddDate(0, 0, 6)); d = d.AddDate(0, 0, 1) {
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
 		key := d.Format("2006-01-02")
 		m := counts[key]
 		cells = append(cells, CalendarCell{
@@ -155,12 +153,11 @@ func cellClass(count int) string {
 	}
 }
 
-// buildDayRows orders the day rows newest first.
+// buildDayRows orders the day rows newest first and skips days with no entries.
 func buildDayRows(days []time.Time, counts map[string]dayMetric) []DayRow {
 	rows := make([]DayRow, 0, len(days))
 	for i := len(days) - 1; i >= 0; i-- {
-		d := days[i]
-		key := d.Format("2006-01-02")
+		key := days[i].Format("2006-01-02")
 		m := counts[key]
 		if m.Entries == 0 {
 			continue
@@ -171,6 +168,7 @@ func buildDayRows(days []time.Time, counts map[string]dayMetric) []DayRow {
 }
 
 // buildTagBars scales tag counts to percent widths against the top tag.
+// The top tag gets width 100 and every other tag gets at least width 4.
 func buildTagBars(tags []vault.TagCount) []TagBar {
 	if len(tags) == 0 {
 		return nil
@@ -187,7 +185,7 @@ func buildTagBars(tags []vault.TagCount) []TagBar {
 	return out
 }
 
-// startOfWeek returns the Sunday at or before t.
+// startOfWeek returns midnight on the Sunday at or before t.
 func startOfWeek(t time.Time) time.Time {
 	day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 	return day.AddDate(0, 0, -int(day.Weekday()))

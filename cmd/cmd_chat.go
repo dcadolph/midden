@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/dcadolph/midden/index"
 	"github.com/dcadolph/midden/llm"
 )
 
@@ -37,33 +35,20 @@ func runChat(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	idx, err := index.Load(filepath.Join(v.Dir, index.Filename))
+	question := strings.Join(args, " ")
+	rc, err := embedRecallQuery(cmd, v, question, 60*time.Second)
 	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("load index: %w", err))
-	}
-	if len(idx.Entries) == 0 {
-		return errors.Join(ErrNotFound, fmt.Errorf("no index found: run `midden reindex` first"))
-	}
-	emb, err := llm.EmbedderFromEnv()
-	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("pick embedder: %w", err))
+		return err
 	}
 	chat, err := llm.ChatterFromEnv()
 	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("pick chatter: %w", err))
+		return errors.Join(ErrLLM, fmt.Errorf("pick chatter: %w", err))
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	question := strings.Join(args, " ")
-	vecs, err := emb.Embed(ctx, []string{question})
-	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("embed query: %w", err))
-	}
-	matches := idx.Search(vecs[0], chatTopK)
+	matches := rc.Index.Search(rc.Query, chatTopK)
 	var contextBuf strings.Builder
 	for _, m := range matches {
 		contextBuf.WriteString("--- ")
-		contextBuf.WriteString(m.Entry.Time.Format("2006-01-02 15:04:05"))
+		contextBuf.WriteString(m.Entry.Time.Format(layoutDateTime))
 		if len(m.Entry.Tags) > 0 {
 			contextBuf.WriteString(" [")
 			contextBuf.WriteString(strings.Join(m.Entry.Tags, ", "))
@@ -75,11 +60,13 @@ func runChat(cmd *cobra.Command, args []string) error {
 	}
 	system := "You are a personal journal assistant. Answer the user's question using only the journal entries supplied below. Quote the date of any entry you cite. If the entries do not contain the answer, say so plainly. Do not invent facts."
 	user := "Question: " + question + "\n\nRelevant entries:\n" + contextBuf.String()
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
 	reply, err := chat.Reply(ctx, system, []llm.Message{{Role: "user", Content: user}})
 	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("chat: %w", err))
+		return errors.Join(ErrLLM, fmt.Errorf("chat: %w", err))
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), strings.TrimSpace(reply))
-	fmt.Fprintf(cmd.ErrOrStderr(), "\n(answered with %s over %d entries via %s)\n", chat.Name(), len(matches), emb.Name())
+	fmt.Fprintf(cmd.ErrOrStderr(), "\n(answered with %s over %d entries via %s)\n", chat.Name(), len(matches), rc.Embedder.Name())
 	return nil
 }

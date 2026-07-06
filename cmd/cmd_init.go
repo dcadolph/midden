@@ -62,7 +62,7 @@ func writeVaultGitignore(v *vault.Vault) error {
 	if _, err := os.Stat(path); err == nil {
 		return nil
 	}
-	body := ".midden.lock\n.DS_Store\n*.swp\n*.swo\n.idea/\n.vscode/\n"
+	body := ".midden.lock\n.midden.index.json\n.midden-tmp-*\n.DS_Store\n*.swp\n*.swo\n.idea/\n.vscode/\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		return fmt.Errorf("write vault gitignore: %w", err)
 	}

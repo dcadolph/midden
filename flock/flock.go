@@ -2,6 +2,7 @@
 package flock
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"syscall"
@@ -15,12 +16,23 @@ type Lock struct {
 
 // Acquire opens the lock file at path and takes an exclusive advisory lock.
 // The lock file is created with mode 0o600 if it does not exist.
-// Acquire blocks until the lock is granted or the underlying syscall fails.
+// A non-blocking attempt runs first; when another process holds the lock a
+// single notice is printed to stderr before falling back to a blocking wait,
+// so users know why the command has paused.
 func Acquire(path string) (*Lock, error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // Lock path derives from the vault directory.
 	if err != nil {
 		return nil, fmt.Errorf("open lock file: %w", err)
 	}
+	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err == nil {
+		return &Lock{f: f}, nil
+	}
+	if !errors.Is(err, syscall.EWOULDBLOCK) {
+		_ = f.Close()
+		return nil, fmt.Errorf("lock %s: %w", path, err)
+	}
+	fmt.Fprintln(os.Stderr, "waiting for vault lock (another midden command is running)")
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
 		_ = f.Close()
 		return nil, fmt.Errorf("lock %s: %w", path, err)

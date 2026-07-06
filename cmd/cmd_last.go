@@ -32,7 +32,7 @@ func runLast(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("read recent: %w", err))
 	}
-	if len(entries) == 0 {
+	if len(entries) == 0 && !jsonOutput {
 		return errors.Join(ErrNotFound, fmt.Errorf("no entries yet"))
 	}
 	return printEntries(cmd.OutOrStdout(), entries)

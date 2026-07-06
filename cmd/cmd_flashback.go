@@ -40,7 +40,7 @@ func runFlashback(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("flashback: %w", err))
 	}
-	if len(entries) == 0 {
+	if len(entries) == 0 && !jsonOutput {
 		return errors.Join(ErrNotFound, fmt.Errorf("no entries on %s in any prior year", target.Format("01-02")))
 	}
 	return printEntries(cmd.OutOrStdout(), entries)
