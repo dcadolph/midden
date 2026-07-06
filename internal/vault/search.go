@@ -2,6 +2,7 @@ package vault
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -33,7 +34,9 @@ func (v *Vault) ReadRange(from, to time.Time) ([]Entry, error) {
 }
 
 // Recent returns the most recent n entries across all day files.
-// The slice is ordered newest first.
+// The slice is ordered newest first. Entries inside a day file are sorted by
+// timestamp before selection because imports can append out of order; an
+// entry's timestamp always falls on its file's date, so day order holds.
 func (v *Vault) Recent(n int) ([]Entry, error) {
 	if n <= 0 {
 		return nil, fmt.Errorf("recent count must be positive")
@@ -48,6 +51,7 @@ func (v *Vault) Recent(n int) ([]Entry, error) {
 		if err != nil {
 			return nil, err
 		}
+		sort.SliceStable(entries, func(a, b int) bool { return entries[a].Time.Before(entries[b].Time) })
 		for j := len(entries) - 1; j >= 0 && len(out) < n; j-- {
 			out = append(out, entries[j])
 		}

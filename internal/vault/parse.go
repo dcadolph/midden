@@ -64,14 +64,13 @@ func parseDayBytes(day time.Time, path string, data []byte) ([]Entry, error) {
 			continue
 		}
 		if m := entryHeaderRe.FindStringSubmatch(line); m != nil {
-			finalize()
-			t, err := parseEntryTime(dayDate, m[1], m[2], m[3])
-			if err != nil {
-				return nil, fmt.Errorf("parse entry time on %s: %w", path, err)
+			if t, err := parseEntryTime(dayDate, m[1], m[2], m[3]); err == nil {
+				finalize()
+				current = &Entry{Time: t, Tags: extractTags(m[4])}
+				continue
 			}
-			tags := extractTags(m[4])
-			current = &Entry{Time: t, Tags: tags}
-			continue
+			// A header with an impossible time (for example a hand edit) is
+			// kept as body text instead of aborting the whole day.
 		}
 		if current == nil {
 			continue
@@ -102,7 +101,7 @@ func (v *Vault) ListDays() ([]time.Time, error) {
 		if !y.IsDir() || !isFourDigit(y.Name()) {
 			continue
 		}
-		months, err := os.ReadDir(joinPath(root, y.Name()))
+		months, err := os.ReadDir(filepath.Join(root, y.Name()))
 		if err != nil {
 			return nil, fmt.Errorf("read year directory: %w", err)
 		}
@@ -110,7 +109,7 @@ func (v *Vault) ListDays() ([]time.Time, error) {
 			if !m.IsDir() || !isTwoDigit(m.Name()) {
 				continue
 			}
-			files, err := os.ReadDir(joinPath(root, y.Name(), m.Name()))
+			files, err := os.ReadDir(filepath.Join(root, y.Name(), m.Name()))
 			if err != nil {
 				return nil, fmt.Errorf("read month directory: %w", err)
 			}
@@ -187,9 +186,4 @@ func isDigits(s string) bool {
 		}
 	}
 	return true
-}
-
-// joinPath wraps filepath.Join to keep the parser readable.
-func joinPath(parts ...string) string {
-	return filepath.Join(parts...)
 }

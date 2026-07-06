@@ -151,12 +151,7 @@ func Open(override string) (*Vault, error) {
 // DayPath returns the absolute path to the markdown file for the given local date.
 // The file is not guaranteed to exist.
 func (v *Vault) DayPath(day time.Time) string {
-	return filepath.Join(
-		v.Dir,
-		fmt.Sprintf("%04d", day.Year()),
-		fmt.Sprintf("%02d", int(day.Month())),
-		fmt.Sprintf("%02d.md", day.Day()),
-	)
+	return filepath.Join(v.Dir, day.Format("2006"), day.Format("01"), day.Format("02")+".md")
 }
 
 // EnsureDayFile creates the day file for the given local date if it does not exist.
@@ -296,22 +291,18 @@ func (v *Vault) readDayBytes(path string) ([]byte, error) {
 
 // resolveDir picks the vault directory using override then env then default.
 func resolveDir(override string) (string, error) {
-	if override != "" {
-		return absolute(override)
+	pick := override
+	if pick == "" {
+		pick = os.Getenv(EnvHome)
 	}
-	if env := os.Getenv(EnvHome); env != "" {
-		return absolute(env)
+	if pick == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("user home: %w", err)
+		}
+		return filepath.Join(home, DefaultDir), nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("user home: %w", err)
-	}
-	return filepath.Join(home, DefaultDir), nil
-}
-
-// absolute expands a leading tilde and converts the path to an absolute path.
-func absolute(p string) (string, error) {
-	abs, err := util.Absolute(p)
+	abs, err := util.Absolute(pick)
 	if err != nil {
 		return "", fmt.Errorf("absolute path: %w", err)
 	}
