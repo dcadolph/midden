@@ -14,7 +14,7 @@ import (
 
 // EnvPassphrase is the environment variable that supplies the vault passphrase
 // without an interactive prompt.
-const EnvPassphrase = "MIDDEN_PASSPHRASE"
+const EnvPassphrase = "MIDDEN_PASSPHRASE" //nolint:gosec // Environment variable name, not a credential.
 
 // passphraseFlag holds the value of --passphrase when supplied.
 // Setting it on the command line is discouraged because it can be captured by
@@ -76,7 +76,7 @@ func readPassphraseFromTerminal(prompt string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("open tty: %w", err)
 	}
-	defer tty.Close()
+	defer func() { _ = tty.Close() }()
 	if _, err := fmt.Fprint(tty, prompt); err != nil {
 		return "", fmt.Errorf("write prompt: %w", err)
 	}

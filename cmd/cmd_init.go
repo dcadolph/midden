@@ -49,7 +49,7 @@ func writeVaultReadme(v *vault.Vault) error {
 		"Each entry begins with a level-two header carrying a timestamp\n" +
 		"and optional inline hashtags, followed by a free markdown body.\n\n" +
 		"Manage entries with the `midden` CLI.\n"
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		return fmt.Errorf("write vault README: %w", err)
 	}
 	return nil
@@ -63,7 +63,7 @@ func writeVaultGitignore(v *vault.Vault) error {
 		return nil
 	}
 	body := ".midden.lock\n.DS_Store\n*.swp\n*.swo\n.idea/\n.vscode/\n"
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		return fmt.Errorf("write vault gitignore: %w", err)
 	}
 	return nil

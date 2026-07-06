@@ -35,14 +35,14 @@ func runRaw(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	path := v.DayPath(day)
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // Day path derives from the vault directory.
 	if err != nil {
 		if os.IsNotExist(err) {
 			return errors.Join(ErrNotFound, fmt.Errorf("no day file at %s", path))
 		}
 		return errors.Join(ErrVault, fmt.Errorf("open %s: %w", path, err))
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if _, err := io.Copy(cmd.OutOrStdout(), f); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("read %s: %w", path, err))
 	}

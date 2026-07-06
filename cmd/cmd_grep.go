@@ -29,7 +29,7 @@ func runGrep(_ *cobra.Command, args []string) error {
 		return err
 	}
 	binary, base := pickGrepBinary()
-	cmd := exec.Command(binary, append(append([]string{}, base...), append(args, v.Dir)...)...)
+	cmd := exec.Command(binary, append(append([]string{}, base...), append(args, v.Dir)...)...) //nolint:gosec // Grep binary resolved via exec.LookPath.
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

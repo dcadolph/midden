@@ -33,7 +33,7 @@ func runToday(cmd *cobra.Command, _ []string) error {
 		return errors.Join(ErrVault, fmt.Errorf("ensure today: %w", err))
 	}
 	editor := chooseEditor()
-	c := exec.Command(editor, path)
+	c := exec.Command(editor, path) //nolint:gosec // Editor comes from user config or environment.
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr

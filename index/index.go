@@ -49,7 +49,7 @@ type Match struct {
 // Load reads an existing index file from disk.
 // A missing file returns a zero Index and a nil error.
 func Load(path string) (*Index, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // Index path derives from the vault directory.
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return &Index{}, nil
@@ -66,14 +66,14 @@ func Load(path string) (*Index, error) {
 // Save writes the index to disk atomically.
 func (i *Index) Save(path string) error {
 	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // Index path derives from the vault directory.
 	if err != nil {
 		return fmt.Errorf("open temp index: %w", err)
 	}
 	enc := json.NewEncoder(f)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(i); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("encode index: %w", err)
 	}
 	if err := f.Close(); err != nil {

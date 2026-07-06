@@ -1,7 +1,6 @@
 version: "2"
 
 run:
-  go: stable
   timeout: 5m
 
 linters:
@@ -16,14 +15,17 @@ linters:
     - misspell
     - staticcheck
     - unused
-
-linters-settings:
-  misspell:
-    locale: US
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gosec
-        - errcheck
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    misspell:
+      locale: US
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck

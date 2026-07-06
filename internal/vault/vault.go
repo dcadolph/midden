@@ -107,7 +107,7 @@ func Open(override string) (*Vault, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve vault directory: %w", err)
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("create vault directory: %w", err)
 	}
 	return &Vault{Dir: dir}, nil
@@ -136,7 +136,7 @@ func (v *Vault) EnsureDayFile(day time.Time) (string, error) {
 	} else if !os.IsNotExist(err) {
 		return "", fmt.Errorf("stat day file: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return "", fmt.Errorf("create day directory: %w", err)
 	}
 	header := fmt.Sprintf("# %s\n\n", day.Format("2006-01-02"))
@@ -180,7 +180,7 @@ func (v *Vault) writeDayBytes(path string, contents []byte) error {
 // Encrypted files are recognized by their age magic header regardless of the
 // vault marker so files in transit between encryption states still decode.
 func (v *Vault) readDayBytes(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // Day path derives from the vault directory.
 	if err != nil {
 		return nil, fmt.Errorf("read day file %s: %w", path, err)
 	}

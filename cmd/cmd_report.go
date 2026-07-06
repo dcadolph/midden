@@ -51,13 +51,16 @@ func runReportHTML(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("build report: %w", err))
 	}
-	f, err := os.Create(reportOutput)
+	f, err := os.Create(reportOutput) //nolint:gosec // Output path supplied by the user.
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("create %s: %w", reportOutput, err))
 	}
-	defer f.Close()
 	if err := report.Render(f, data); err != nil {
+		_ = f.Close()
 		return errors.Join(ErrVault, fmt.Errorf("render report: %w", err))
+	}
+	if err := f.Close(); err != nil {
+		return errors.Join(ErrVault, fmt.Errorf("close report: %w", err))
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Wrote report to %s\n", reportOutput)
 	return nil

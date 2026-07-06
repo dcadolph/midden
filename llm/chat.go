@@ -99,7 +99,7 @@ func (c *anthropicChat) Reply(ctx context.Context, system string, history []Mess
 	if err != nil {
 		return "", fmt.Errorf("do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("anthropic messages: %s: %s", resp.Status, string(data))
@@ -164,7 +164,7 @@ func (c *openAIChat) Reply(ctx context.Context, system string, history []Message
 	if err != nil {
 		return "", fmt.Errorf("do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("openai chat: %s: %s", resp.Status, string(data))
@@ -226,7 +226,7 @@ func (c *ollamaChat) Reply(ctx context.Context, system string, history []Message
 	if err != nil {
 		return "", fmt.Errorf("do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("ollama chat: %s: %s", resp.Status, string(data))

@@ -103,7 +103,7 @@ func runEncryptEnable(cmd *cobra.Command, _ []string) error {
 		return errors.Join(ErrVault, err)
 	}
 	for _, p := range files {
-		data, err := os.ReadFile(p)
+		data, err := os.ReadFile(p) //nolint:gosec // Day paths enumerated from the vault directory.
 		if err != nil {
 			return errors.Join(ErrVault, fmt.Errorf("read %s: %w", p, err))
 		}
@@ -141,7 +141,7 @@ func runEncryptDisable(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return errors.Join(ErrVault, fmt.Errorf("decrypt %s: %w", p, err))
 		}
-		if err := os.WriteFile(p, data, 0o644); err != nil {
+		if err := os.WriteFile(p, data, 0o600); err != nil {
 			return errors.Join(ErrVault, fmt.Errorf("write %s: %w", p, err))
 		}
 	}

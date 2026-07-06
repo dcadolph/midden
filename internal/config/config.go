@@ -39,7 +39,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // Config path resolved from the environment.
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return Config{}, nil

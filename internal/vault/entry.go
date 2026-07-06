@@ -33,17 +33,17 @@ func (v *Vault) Append(entry Entry) error {
 	if err != nil {
 		return fmt.Errorf("acquire vault lock: %w", err)
 	}
-	defer lock.Close()
+	defer func() { _ = lock.Close() }()
 	path, err := v.EnsureDayFile(entry.Time)
 	if err != nil {
 		return err
 	}
 	if v.Passphrase == "" {
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600) //nolint:gosec // Day path derives from the vault directory.
 		if err != nil {
 			return fmt.Errorf("open day file: %w", err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		if _, err := f.WriteString(entry.Serialize()); err != nil {
 			return fmt.Errorf("append entry: %w", err)
 		}
@@ -53,8 +53,8 @@ func (v *Vault) Append(entry Entry) error {
 	if err != nil {
 		return err
 	}
-	updated := append(existing, []byte(entry.Serialize())...)
-	if err := v.writeDayBytes(path, updated); err != nil {
+	existing = append(existing, []byte(entry.Serialize())...)
+	if err := v.writeDayBytes(path, existing); err != nil {
 		return err
 	}
 	return nil

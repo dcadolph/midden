@@ -38,7 +38,7 @@ func Encrypt(w io.Writer, passphrase string, plaintext []byte) error {
 		return fmt.Errorf("open encrypt stream: %w", err)
 	}
 	if _, err := stream.Write(plaintext); err != nil {
-		stream.Close()
+		_ = stream.Close()
 		return fmt.Errorf("write encrypt stream: %w", err)
 	}
 	if err := stream.Close(); err != nil {

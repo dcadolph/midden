@@ -92,7 +92,7 @@ func (e *openAIEmbed) Embed(ctx context.Context, texts []string) ([][]float32, e
 	if err != nil {
 		return nil, fmt.Errorf("do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("openai embeddings: %s: %s", resp.Status, string(data))
@@ -152,7 +152,7 @@ func (e *voyageEmbed) Embed(ctx context.Context, texts []string) ([][]float32, e
 	if err != nil {
 		return nil, fmt.Errorf("do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("voyage embeddings: %s: %s", resp.Status, string(data))
@@ -214,7 +214,7 @@ func (e *ollamaEmbed) Embed(ctx context.Context, texts []string) ([][]float32, e
 			return nil, fmt.Errorf("do request: %w", err)
 		}
 		data, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("ollama embeddings: %s: %s", resp.Status, string(data))
 		}
@@ -244,6 +244,6 @@ func isOllamaReachable() bool {
 	if err != nil {
 		return false
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
 }
