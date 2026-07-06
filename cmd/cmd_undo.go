@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"github.com/dcadolph/midden/flock"
 )
 
 // undoCmd removes the most recent entry from the most recent day file.
@@ -25,6 +27,11 @@ func runUndo(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	lock, err := flock.Acquire(v.LockPath())
+	if err != nil {
+		return errors.Join(ErrVault, fmt.Errorf("acquire vault lock: %w", err))
+	}
+	defer func() { _ = lock.Close() }()
 	days, err := v.ListDays()
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("list days: %w", err))
@@ -42,7 +49,7 @@ func runUndo(cmd *cobra.Command, _ []string) error {
 		if err := v.WriteBytes(path, trimmed); err != nil {
 			return errors.Join(ErrVault, fmt.Errorf("write %s: %w", path, err))
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Removed last entry from %s\n", days[i].Format("2006-01-02"))
+		fmt.Fprintf(cmd.OutOrStdout(), "Removed last entry from %s\n", days[i].Format(layoutDate))
 		return nil
 	}
 	return errors.Join(ErrNotFound, fmt.Errorf("no entries to remove"))

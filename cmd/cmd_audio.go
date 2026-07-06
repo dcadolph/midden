@@ -27,7 +27,8 @@ var audioDuration time.Duration
 // audioTranscribe enables Whisper transcription after recording.
 var audioTranscribe bool
 
-// audioTags attach to the entry written for the audio file.
+// audioTags attach to the entry written for the audio file in addition to the
+// always-present "audio" tag merged in at append time.
 var audioTags []string
 
 // audioCmd captures a voice memo and writes a linking entry to today's day file.
@@ -38,9 +39,9 @@ var audioCmd = &cobra.Command{
 }
 
 func init() {
-	audioCmd.Flags().DurationVarP(&audioDuration, "duration", "d", 0, "Cap the recording length (0 = record until Ctrl-C).")
+	audioCmd.Flags().DurationVar(&audioDuration, "duration", 0, "Cap the recording length (0 = record until Ctrl-C).")
 	audioCmd.Flags().BoolVar(&audioTranscribe, "transcribe", false, "Run OpenAI Whisper transcription after recording (needs $OPENAI_API_KEY).")
-	audioCmd.Flags().StringSliceVarP(&audioTags, "tag", "t", []string{"audio"}, "Tags to attach to the entry.")
+	audioCmd.Flags().StringSliceVarP(&audioTags, "tag", "t", nil, "Tags to attach to the entry (the audio tag is always added).")
 	rootCmd.AddCommand(audioCmd)
 }
 
@@ -60,6 +61,13 @@ func runAudio(cmd *cobra.Command, _ []string) error {
 	if err := recordAudio(cmd, path); err != nil {
 		return err
 	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return errors.Join(ErrVault, fmt.Errorf("recording produced no file: %w", err))
+	}
+	if info.Size() == 0 {
+		return errors.Join(ErrVault, fmt.Errorf("recording produced empty file %s", path))
+	}
 	body := fmt.Sprintf("Voice memo at `%s`.", path)
 	if audioTranscribe {
 		text, err := transcribeWhisper(path)
@@ -69,7 +77,7 @@ func runAudio(cmd *cobra.Command, _ []string) error {
 			body = strings.TrimSpace(text) + "\n\nAudio: `" + path + "`"
 		}
 	}
-	if err := v.Append(vault.Entry{Time: when, Tags: entryTags(audioTags), Body: body}); err != nil {
+	if err := v.Append(vault.Entry{Time: when, Tags: entryTags(append(audioTags, "audio")), Body: body}); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("append audio entry: %w", err))
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Saved audio to %s\n", path)
@@ -93,6 +101,8 @@ func recordAudio(cmd *cobra.Command, path string) error {
 	if err := c.Run(); err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
+			// Ctrl-C exits the recorder non-zero; the caller validates the
+			// output file instead of trusting the exit code.
 			return nil
 		}
 		return errors.Join(ErrVault, fmt.Errorf("run %s: %w", binary, err))
@@ -175,12 +185,15 @@ func transcribeWhisper(path string) (string, error) {
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+key)
-	resp, err := (&http.Client{Timeout: 5 * time.Minute}).Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("do request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	data, _ := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("whisper: %s: %s", resp.Status, string(data))
 	}

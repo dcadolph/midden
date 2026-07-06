@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/dcadolph/midden/internal/util"
 )
 
 // EnvConfig is the environment variable that overrides the configuration file path.
@@ -57,7 +59,11 @@ func Load() (Config, error) {
 // It does not check whether the file exists.
 func ResolvePath() (string, error) {
 	if env := os.Getenv(EnvConfig); env != "" {
-		return env, nil
+		path, err := util.Absolute(env)
+		if err != nil {
+			return "", fmt.Errorf("resolve %s: %w", EnvConfig, err)
+		}
+		return path, nil
 	}
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {

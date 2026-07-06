@@ -26,10 +26,13 @@ func Wrap(ctx context.Context, logger *slog.Logger) context.Context {
 	return context.WithValue(ctx, loggerKey{}, logger)
 }
 
+// nop is the shared discard logger returned when a context carries no logger.
+var nop = slog.New(slog.NewTextHandler(io.Discard, nil)) //nolint:gochecknoglobals // Immutable fallback logger.
+
 // Unwrap recovers the logger from ctx, falling back to a discard logger when none is stored.
 func Unwrap(ctx context.Context) *slog.Logger {
 	if l, ok := ctx.Value(loggerKey{}).(*slog.Logger); ok && l != nil {
 		return l
 	}
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return nop
 }

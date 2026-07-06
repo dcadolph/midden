@@ -1,7 +1,6 @@
 package index
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -26,9 +25,8 @@ func TestSearchRanksByCosine(t *testing.T) {
 	}
 }
 
-func TestSaveLoadRoundTrip(t *testing.T) {
+func TestEncodeDecodeRoundTrip(t *testing.T) {
 	t.Parallel()
-	path := filepath.Join(t.TempDir(), Filename)
 	idx := &Index{
 		Provider: "stub:dim3",
 		Dim:      3,
@@ -37,25 +35,26 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 			{Time: time.Unix(1_700_000_500, 0).UTC(), Body: "hello", Embedding: []float32{1, 2, 3}},
 		},
 	}
-	if err := idx.Save(path); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	loaded, err := Load(path)
+	data, err := idx.Encode()
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("Encode: %v", err)
+	}
+	loaded, err := Decode(data)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
 	}
 	if loaded.Provider != idx.Provider || loaded.Dim != idx.Dim || len(loaded.Entries) != 1 {
 		t.Fatalf("round-trip mismatch: %+v", loaded)
 	}
 }
 
-func TestLoadMissingFile(t *testing.T) {
+func TestDecodeEmpty(t *testing.T) {
 	t.Parallel()
-	idx, err := Load(filepath.Join(t.TempDir(), "missing.json"))
+	idx, err := Decode(nil)
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("Decode: %v", err)
 	}
 	if len(idx.Entries) != 0 {
-		t.Errorf("missing index should be empty, got %d entries", len(idx.Entries))
+		t.Errorf("empty index should have no entries, got %d", len(idx.Entries))
 	}
 }

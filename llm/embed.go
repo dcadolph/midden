@@ -2,19 +2,16 @@
 package llm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"time"
+	"sync/atomic"
 )
 
 // Embedder produces a vector embedding for each input string.
-// Implementations should be safe to call from multiple goroutines.
+// Implementations are safe to call from multiple goroutines.
 type Embedder interface {
 	// Embed returns one vector per input string.
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
@@ -25,8 +22,8 @@ type Embedder interface {
 }
 
 // EmbedderFromEnv picks an embedder using documented environment precedence.
-// VOYAGE_API_KEY → Voyage AI, OPENAI_API_KEY → OpenAI, OLLAMA_HOST → local Ollama.
-// An explicit MIDDEN_EMBED_PROVIDER short-circuits autodetection.
+// VOYAGE_API_KEY → Voyage AI, OPENAI_API_KEY → OpenAI, then a configured or
+// reachable Ollama daemon. MIDDEN_EMBED_PROVIDER short-circuits autodetection.
 func EmbedderFromEnv() (Embedder, error) {
 	provider := os.Getenv("MIDDEN_EMBED_PROVIDER")
 	switch provider {
@@ -52,14 +49,48 @@ func EmbedderFromEnv() (Embedder, error) {
 	return nil, errors.New("no embedding provider configured: set VOYAGE_API_KEY, OPENAI_API_KEY, or run ollama locally")
 }
 
-// httpDo is the shared HTTP client used by every provider.
-var httpDo = (&http.Client{Timeout: 60 * time.Second}).Do
+// dimTracker records the embedding dimension observed on the first result.
+// Embed may run from multiple goroutines, so the value is atomic.
+type dimTracker struct {
+	// dim is the observed embedding dimension, zero until known.
+	dim atomic.Int64
+}
+
+// Dim returns the recorded embedding dimension, or zero when unknown.
+func (d *dimTracker) Dim() int { return int(d.dim.Load()) }
+
+// record stores the dimension of the first vector in vecs, when present.
+func (d *dimTracker) record(vecs [][]float32) {
+	if len(vecs) > 0 && len(vecs[0]) > 0 {
+		d.dim.Store(int64(len(vecs[0])))
+	}
+}
+
+// dataEmbeddings decodes the {"data":[{"embedding":[...]}]} shape shared by
+// OpenAI and Voyage embedding responses.
+func dataEmbeddings(data []byte) ([][]float32, error) {
+	var parsed struct {
+		Data []struct {
+			Embedding []float32 `json:"embedding"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	out := make([][]float32, len(parsed.Data))
+	for i, d := range parsed.Data {
+		out[i] = d.Embedding
+	}
+	return out, nil
+}
 
 // openAIEmbed implements Embedder against the OpenAI embeddings endpoint.
 type openAIEmbed struct {
+	dimTracker
+	// apiKey authenticates requests; never logged or serialized.
 	apiKey string
-	model  string
-	dim    int
+	// model is the model ID sent with every request.
+	model string
 }
 
 func newOpenAIEmbed() (*openAIEmbed, error) {
@@ -69,57 +100,38 @@ func newOpenAIEmbed() (*openAIEmbed, error) {
 	}
 	model := os.Getenv("OPENAI_EMBED_MODEL")
 	if model == "" {
-		model = "text-embedding-3-small"
+		model = defaultOpenAIEmbedModel
 	}
 	return &openAIEmbed{apiKey: key, model: model}, nil
 }
 
 func (e *openAIEmbed) Name() string { return "openai:" + e.model }
-func (e *openAIEmbed) Dim() int     { return e.dim }
 
 func (e *openAIEmbed) Embed(ctx context.Context, texts []string) ([][]float32, error) {
-	body, err := json.Marshal(map[string]any{"input": texts, "model": e.model})
+	if len(texts) == 0 {
+		return nil, nil
+	}
+	data, err := postJSON(ctx, "openai embeddings", "https://api.openai.com/v1/embeddings",
+		map[string]string{"Authorization": "Bearer " + e.apiKey},
+		map[string]any{"input": texts, "model": e.model})
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/embeddings", bytes.NewReader(body))
+	out, err := dataEmbeddings(data)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+e.apiKey)
-	resp, err := httpDo(req)
-	if err != nil {
-		return nil, fmt.Errorf("do request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("openai embeddings: %s: %s", resp.Status, string(data))
-	}
-	var parsed struct {
-		Data []struct {
-			Embedding []float32 `json:"embedding"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	out := make([][]float32, len(parsed.Data))
-	for i, d := range parsed.Data {
-		out[i] = d.Embedding
-		if i == 0 {
-			e.dim = len(d.Embedding)
-		}
-	}
+	e.record(out)
 	return out, nil
 }
 
 // voyageEmbed implements Embedder against the Voyage AI embeddings endpoint.
 type voyageEmbed struct {
+	dimTracker
+	// apiKey authenticates requests; never logged or serialized.
 	apiKey string
-	model  string
-	dim    int
+	// model is the model ID sent with every request.
+	model string
 }
 
 func newVoyage() (*voyageEmbed, error) {
@@ -129,121 +141,68 @@ func newVoyage() (*voyageEmbed, error) {
 	}
 	model := os.Getenv("VOYAGE_EMBED_MODEL")
 	if model == "" {
-		model = "voyage-3"
+		model = defaultVoyageEmbedModel
 	}
 	return &voyageEmbed{apiKey: key, model: model}, nil
 }
 
 func (e *voyageEmbed) Name() string { return "voyage:" + e.model }
-func (e *voyageEmbed) Dim() int     { return e.dim }
 
 func (e *voyageEmbed) Embed(ctx context.Context, texts []string) ([][]float32, error) {
-	body, err := json.Marshal(map[string]any{"input": texts, "model": e.model, "input_type": "document"})
+	if len(texts) == 0 {
+		return nil, nil
+	}
+	data, err := postJSON(ctx, "voyage embeddings", "https://api.voyageai.com/v1/embeddings",
+		map[string]string{"Authorization": "Bearer " + e.apiKey},
+		map[string]any{"input": texts, "model": e.model, "input_type": "document"})
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.voyageai.com/v1/embeddings", bytes.NewReader(body))
+	out, err := dataEmbeddings(data)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+e.apiKey)
-	resp, err := httpDo(req)
-	if err != nil {
-		return nil, fmt.Errorf("do request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("voyage embeddings: %s: %s", resp.Status, string(data))
-	}
-	var parsed struct {
-		Data []struct {
-			Embedding []float32 `json:"embedding"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	out := make([][]float32, len(parsed.Data))
-	for i, d := range parsed.Data {
-		out[i] = d.Embedding
-		if i == 0 {
-			e.dim = len(d.Embedding)
-		}
-	}
+	e.record(out)
 	return out, nil
 }
 
 // ollamaEmbed implements Embedder against a local Ollama daemon.
 type ollamaEmbed struct {
-	host  string
+	dimTracker
+	// host is the Ollama base URL.
+	host string
+	// model is the model name sent with every request.
 	model string
-	dim   int
 }
 
 func newOllamaEmbed() (*ollamaEmbed, error) {
-	host := os.Getenv("OLLAMA_HOST")
-	if host == "" {
-		host = "http://localhost:11434"
-	}
 	model := os.Getenv("OLLAMA_EMBED_MODEL")
 	if model == "" {
-		model = "nomic-embed-text"
+		model = defaultOllamaEmbedModel
 	}
-	return &ollamaEmbed{host: host, model: model}, nil
+	return &ollamaEmbed{host: ollamaHost(), model: model}, nil
 }
 
 func (e *ollamaEmbed) Name() string { return "ollama:" + e.model }
-func (e *ollamaEmbed) Dim() int     { return e.dim }
 
 func (e *ollamaEmbed) Embed(ctx context.Context, texts []string) ([][]float32, error) {
-	out := make([][]float32, len(texts))
-	for i, t := range texts {
-		body, err := json.Marshal(map[string]any{"model": e.model, "prompt": t})
-		if err != nil {
-			return nil, fmt.Errorf("marshal request: %w", err)
-		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.host+"/api/embeddings", bytes.NewReader(body))
-		if err != nil {
-			return nil, fmt.Errorf("build request: %w", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := httpDo(req)
-		if err != nil {
-			return nil, fmt.Errorf("do request: %w", err)
-		}
-		data, _ := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("ollama embeddings: %s: %s", resp.Status, string(data))
-		}
-		var parsed struct {
-			Embedding []float32 `json:"embedding"`
-		}
-		if err := json.Unmarshal(data, &parsed); err != nil {
-			return nil, fmt.Errorf("decode response: %w", err)
-		}
-		out[i] = parsed.Embedding
-		if i == 0 {
-			e.dim = len(parsed.Embedding)
-		}
+	if len(texts) == 0 {
+		return nil, nil
 	}
-	return out, nil
-}
-
-// isOllamaReachable reports whether the local Ollama daemon answers a health check.
-func isOllamaReachable() bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:11434/api/tags", nil)
+	data, err := postJSON(ctx, "ollama embeddings", e.host+"/api/embed", nil,
+		map[string]any{"model": e.model, "input": texts})
 	if err != nil {
-		return false
+		return nil, err
 	}
-	resp, err := httpDo(req)
-	if err != nil {
-		return false
+	var parsed struct {
+		Embeddings [][]float32 `json:"embeddings"`
 	}
-	_ = resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	if len(parsed.Embeddings) != len(texts) {
+		return nil, fmt.Errorf("ollama embeddings: got %d vectors for %d inputs", len(parsed.Embeddings), len(texts))
+	}
+	e.record(parsed.Embeddings)
+	return parsed.Embeddings, nil
 }

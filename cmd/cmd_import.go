@@ -50,7 +50,7 @@ func runImport(cmd *cobra.Command, args []string) error {
 	if err := v.Append(vault.Entry{Time: when, Tags: entryTags(importTags), Body: body}); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("append imported entry: %w", err))
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Imported %s into %s\n", args[0], when.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(cmd.OutOrStdout(), "Imported %s into %s\n", args[0], when.Format(layoutDateTime))
 	return nil
 }
 
@@ -71,14 +71,15 @@ func readImportBody(path string) (string, error) {
 }
 
 // importTimestamp resolves the import date string to a local timestamp.
-// Today and relative dates keep the current clock time so the entry sorts naturally;
-// absolute dates use noon local so entries land mid-day without timezone surprises.
+// "today" keeps the current clock time so the entry sorts naturally; every
+// other date resolves to noon local so entries land mid-day without timezone
+// surprises.
 func importTimestamp(s string) (time.Time, error) {
 	day, err := dateutil.Parse(s)
 	if err != nil {
 		return time.Time{}, err
 	}
-	if s == "today" || s == "" {
+	if s == "today" {
 		return time.Now(), nil
 	}
 	return time.Date(day.Year(), day.Month(), day.Day(), 12, 0, 0, 0, day.Location()), nil

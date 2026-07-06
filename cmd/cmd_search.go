@@ -31,7 +31,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("search: %w", err))
 	}
-	if len(entries) == 0 {
+	if len(entries) == 0 && !jsonOutput {
 		return errors.Join(ErrNotFound, fmt.Errorf("no entries match %q", q))
 	}
 	return printEntries(cmd.OutOrStdout(), entries)

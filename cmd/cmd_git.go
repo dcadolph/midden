@@ -59,7 +59,7 @@ func runGitInit(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("vault already a git repository")
 	}
 	if _, err := git.PlainInit(v.Dir, false); err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("git init: %w", err))
+		return errors.Join(ErrGit, fmt.Errorf("git init: %w", err))
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Initialized git repository in %s\n", v.Dir)
 	return nil
@@ -73,11 +73,11 @@ func runGitStatus(cmd *cobra.Command, _ []string) error {
 	}
 	wt, err := repo.Worktree()
 	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("worktree: %w", err))
+		return errors.Join(ErrGit, fmt.Errorf("worktree: %w", err))
 	}
 	status, err := wt.Status()
 	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("status: %w", err))
+		return errors.Join(ErrGit, fmt.Errorf("status: %w", err))
 	}
 	if status.IsClean() {
 		fmt.Fprintln(cmd.OutOrStdout(), "clean")
@@ -95,27 +95,27 @@ func runGitSync(cmd *cobra.Command, _ []string) error {
 	}
 	wt, err := repo.Worktree()
 	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("worktree: %w", err))
+		return errors.Join(ErrGit, fmt.Errorf("worktree: %w", err))
 	}
 	status, err := wt.Status()
 	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("status: %w", err))
+		return errors.Join(ErrGit, fmt.Errorf("status: %w", err))
 	}
 	if status.IsClean() {
 		fmt.Fprintln(cmd.OutOrStdout(), "Nothing to commit.")
 		return tryPush(cmd, repo)
 	}
 	if err := wt.AddWithOptions(&git.AddOptions{All: true}); err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("git add: %w", err))
+		return errors.Join(ErrGit, fmt.Errorf("git add: %w", err))
 	}
 	msg := gitMessage
 	if msg == "" {
-		msg = "autosync " + time.Now().Format("2006-01-02 15:04:05")
+		msg = "autosync " + time.Now().Format(layoutDateTime)
 	}
 	if _, err := wt.Commit(msg, &git.CommitOptions{
 		Author: &object.Signature{Name: "midden", Email: "midden@localhost", When: time.Now()},
 	}); err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("git commit: %w", err))
+		return errors.Join(ErrGit, fmt.Errorf("git commit: %w", err))
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Committed: %s\n", msg)
 	return tryPush(cmd, repo)
@@ -125,7 +125,7 @@ func runGitSync(cmd *cobra.Command, _ []string) error {
 func tryPush(cmd *cobra.Command, repo *git.Repository) error {
 	remotes, err := repo.Remotes()
 	if err != nil {
-		return errors.Join(ErrVault, fmt.Errorf("list remotes: %w", err))
+		return errors.Join(ErrGit, fmt.Errorf("list remotes: %w", err))
 	}
 	if len(remotes) == 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), "No remote configured; skipping push.")
@@ -136,7 +136,7 @@ func tryPush(cmd *cobra.Command, repo *git.Repository) error {
 			fmt.Fprintln(cmd.OutOrStdout(), "Remote already up to date.")
 			return nil
 		}
-		return errors.Join(ErrVault, fmt.Errorf("git push: %w", err))
+		return errors.Join(ErrGit, fmt.Errorf("git push: %w", err))
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "Pushed to origin.")
 	return nil
@@ -150,7 +150,7 @@ func openVaultRepo() (*git.Repository, error) {
 	}
 	repo, err := git.PlainOpen(v.Dir)
 	if err != nil {
-		return nil, errors.Join(ErrVault, fmt.Errorf("open vault repo at %s: %w", filepath.Clean(v.Dir), err))
+		return nil, errors.Join(ErrGit, fmt.Errorf("open vault repo at %s: %w", filepath.Clean(v.Dir), err))
 	}
 	return repo, nil
 }

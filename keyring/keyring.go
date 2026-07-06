@@ -8,6 +8,7 @@ package keyring
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	gokeyring "github.com/zalando/go-keyring"
 )
@@ -19,7 +20,12 @@ const Service = "midden"
 const AccountVaultPassphrase = "vault-passphrase"
 
 // SetVaultPassphrase persists the passphrase in the OS keychain under the midden service.
+// Empty or whitespace-only passphrases are rejected so a later Get cannot
+// return an unusable secret.
 func SetVaultPassphrase(passphrase string) error {
+	if strings.TrimSpace(passphrase) == "" {
+		return errors.New("passphrase is empty")
+	}
 	if err := gokeyring.Set(Service, AccountVaultPassphrase, passphrase); err != nil {
 		return fmt.Errorf("set keychain entry: %w", err)
 	}

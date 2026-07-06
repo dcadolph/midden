@@ -4,9 +4,18 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/dcadolph/midden/internal/jsonutil"
 	"github.com/dcadolph/midden/internal/vault"
+)
+
+// Timestamp layouts shared by every subcommand's output.
+const (
+	// layoutDate renders a date as YYYY-MM-DD.
+	layoutDate = "2006-01-02"
+	// layoutDateTime renders a full local timestamp.
+	layoutDateTime = "2006-01-02 15:04:05"
 )
 
 // printEntries renders the entries to the writer either as JSON or as a human-readable form.
@@ -25,7 +34,7 @@ func printEntries(w io.Writer, entries []vault.Entry) error {
 // writeEntryText renders one entry as paragraphs to the writer.
 // When color is true the timestamp and tag list are colorized with ANSI escapes.
 func writeEntryText(w io.Writer, e vault.Entry, color bool) {
-	ts := e.Time.Format("2006-01-02 15:04:05")
+	ts := e.Time.Format(layoutDateTime)
 	if color {
 		fmt.Fprint(w, colorCyan, ts, colorReset)
 	} else {
@@ -49,7 +58,7 @@ func entriesToJSON(entries []vault.Entry) []entryJSON {
 	out := make([]entryJSON, len(entries))
 	for i, e := range entries {
 		out[i] = entryJSON{
-			Time: e.Time.Format("2006-01-02T15:04:05Z07:00"),
+			Time: e.Time.Format(time.RFC3339),
 			Tags: e.Tags,
 			Body: e.Body,
 		}

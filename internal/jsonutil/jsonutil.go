@@ -7,8 +7,8 @@ import (
 	"io"
 )
 
-// Encode writes v to w as JSON.
-// Pretty controls indented output; compact JSON ends with a single trailing newline.
+// Encode writes v to w as JSON followed by a single trailing newline.
+// Pretty controls indented output.
 func Encode(w io.Writer, v any, pretty bool) error {
 	enc := json.NewEncoder(w)
 	if pretty {
