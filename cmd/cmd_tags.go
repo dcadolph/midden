@@ -9,8 +9,8 @@ import (
 	"github.com/dcadolph/midden/internal/jsonutil"
 )
 
-// tagsLimit caps the size of the tag histogram printed by tagsCmd.
-var tagsLimit int
+// tagsCount caps the size of the tag histogram printed by tagsCmd.
+var tagsCount int
 
 // tagsCmd prints the tag histogram across the vault.
 var tagsCmd = &cobra.Command{
@@ -20,7 +20,7 @@ var tagsCmd = &cobra.Command{
 }
 
 func init() {
-	tagsCmd.Flags().IntVarP(&tagsLimit, "limit", "n", 0, "Limit the number of tags shown; zero means all.")
+	tagsCmd.Flags().IntVarP(&tagsCount, "count", "n", 0, "Number of tags to show; zero means all.")
 	rootCmd.AddCommand(tagsCmd)
 }
 
@@ -30,7 +30,7 @@ func runTags(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	counts, err := v.TagCounts(tagsLimit)
+	counts, err := v.TagCounts(tagsCount)
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("read tags: %w", err))
 	}

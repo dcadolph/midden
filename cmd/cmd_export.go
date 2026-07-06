@@ -29,7 +29,16 @@ func init() {
 }
 
 // runExport executes the export subcommand.
+// The global --json flag implies --format json unless --format was set explicitly.
 func runExport(cmd *cobra.Command, _ []string) error {
+	if jsonOutput && !cmd.Flags().Changed("format") {
+		exportFormat = "json"
+	}
+	switch exportFormat {
+	case "json", "jsonl", "md":
+	default:
+		return fmt.Errorf("unsupported format %q: expected json, jsonl, or md", exportFormat)
+	}
 	v, err := openVault()
 	if err != nil {
 		return err
@@ -40,14 +49,12 @@ func runExport(cmd *cobra.Command, _ []string) error {
 	}
 	w := cmd.OutOrStdout()
 	switch exportFormat {
-	case "json":
-		return exportAsJSON(w, v, days)
 	case "jsonl":
 		return exportAsJSONL(w, v, days)
 	case "md":
 		return exportAsMarkdown(w, v, days)
 	}
-	return fmt.Errorf("unsupported format %q: expected json, jsonl, or md", exportFormat)
+	return exportAsJSON(w, v, days)
 }
 
 // exportAsJSON writes one JSON array containing every entry.

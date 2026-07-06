@@ -31,6 +31,10 @@ func runBetween(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if from.After(to) {
+		return fmt.Errorf("invalid range: from %s is after to %s",
+			from.Format(layoutDate), to.Format(layoutDate))
+	}
 	v, err := openVault()
 	if err != nil {
 		return err
@@ -39,7 +43,7 @@ func runBetween(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("read range: %w", err))
 	}
-	if len(entries) == 0 {
+	if len(entries) == 0 && !jsonOutput {
 		return errors.Join(ErrNotFound, fmt.Errorf("no entries in range"))
 	}
 	return printEntries(cmd.OutOrStdout(), entries)

@@ -47,10 +47,10 @@ func runWeekly(cmd *cobra.Command, _ []string) error {
 	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
 		dayEntries := entriesOnDay(entries, d)
 		if len(dayEntries) == 0 {
-			fmt.Fprintf(w, "## %s (%s)\nno entries\n\n", d.Format("Mon 2006-01-02"), shortWeekday(d))
+			fmt.Fprintf(w, "## %s\nno entries\n\n", d.Format("Mon 2006-01-02"))
 			continue
 		}
-		fmt.Fprintf(w, "## %s (%s) — %d entr%s\n", d.Format("Mon 2006-01-02"), shortWeekday(d), len(dayEntries), plural(len(dayEntries)))
+		fmt.Fprintf(w, "## %s — %s\n", d.Format("Mon 2006-01-02"), entryCount(len(dayEntries)))
 		for _, e := range dayEntries {
 			fmt.Fprintf(w, "- %s", e.Time.Format("15:04"))
 			if len(e.Tags) > 0 {
@@ -92,15 +92,10 @@ func dayStart(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
-// shortWeekday returns the three-letter weekday name.
-func shortWeekday(t time.Time) string {
-	return t.Format("Mon")
-}
-
-// plural returns "y" for one and "ies" otherwise so callers can write "entr"+plural(n).
-func plural(n int) string {
+// entryCount renders n as "1 entry" or "N entries".
+func entryCount(n int) string {
 	if n == 1 {
-		return "y"
+		return "1 entry"
 	}
-	return "ies"
+	return fmt.Sprintf("%d entries", n)
 }
