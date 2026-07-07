@@ -16,3 +16,10 @@ profile.*
 .DS_Store
 *.swp
 *.swo
+
+# Secrets and encrypted journal data
+.env
+.env.*
+*.age
+*.pem
+*.key
