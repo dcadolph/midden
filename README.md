@@ -7,7 +7,7 @@
 [![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-A personal journal kept as plain markdown. Append timestamped entries from the terminal or through a Claude Code skill. Search across years with grep.
+A personal journal kept as plain markdown. Append timestamped entries from the terminal or through a Claude Code skill. Search across years with grep, semantic recall, or by asking questions in plain language.
 
 What is a [midden](https://en.wikipedia.org/wiki/Midden)?
 
@@ -29,11 +29,13 @@ go install .
 
 ```
 midden init                          Create the vault, write a vault README and gitignore.
+midden ingest ics calendar.ics       Backfill past events from a calendar export.
 midden add "text"                    Append an entry to today.
 midden add "text" --tag work         Append with tags.
 midden today                         Open today's day file in the editor.
 midden on yesterday                  Print every entry for yesterday.
 midden search "token"                Find entries whose body or tags contain text.
+midden chat "when did I see Mom?"    Ask a question answered from your own entries.
 ```
 
 Full command list and every integration are in the sections below.
