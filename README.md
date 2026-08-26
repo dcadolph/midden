@@ -139,6 +139,11 @@ Every `chat` answer also carries a summary counted over every indexed entry in s
 what span they cover, the tag histogram, and entries per month. Questions about the shape of the record
 are answered from those counts rather than from a handful of retrieved entries.
 
+`--context-chars` sets how much entry text goes to the model in one call. The default suits a model with
+a large context window. A small local model needs a much lower value, because it spends minutes on a
+prompt a hosted model reads in seconds, which makes a sweep look like a hang. Try `--context-chars 6000`
+against a 3B local model and raise it from there.
+
 </details>
 
 <details>
