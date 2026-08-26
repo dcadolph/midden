@@ -3,6 +3,8 @@ package index
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -68,6 +70,30 @@ func (i *Index) Encode() ([]byte, error) {
 		return nil, fmt.Errorf("encode index: %w", err)
 	}
 	return buf.Bytes(), nil
+}
+
+// ContentHash returns the key that matches an entry body to a cached
+// embedding. Only the body is ever embedded, so two entries with the same text
+// can share a vector no matter how their timestamps or tags differ.
+func ContentHash(body string) string {
+	sum := sha256.Sum256([]byte(body))
+	return hex.EncodeToString(sum[:])
+}
+
+// EmbeddingsByContent maps each indexed body's content hash to its embedding so
+// a rebuild can reuse the vectors for text that has not changed. Rebuilding a
+// vault holding years of backfilled history costs one provider call per batch
+// of new entries this way, rather than re-embedding the whole corpus every time
+// a single day is added.
+func (i *Index) EmbeddingsByContent() map[string][]float32 {
+	out := make(map[string][]float32, len(i.Entries))
+	for _, e := range i.Entries {
+		if len(e.Embedding) == 0 {
+			continue
+		}
+		out[ContentHash(e.Body)] = e.Embedding
+	}
+	return out
 }
 
 // Search returns the top-k entries by cosine similarity to the query vector.
