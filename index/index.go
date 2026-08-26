@@ -24,7 +24,7 @@ type Entry struct {
 	// Body is the entry text. Stored verbatim so recall can quote it back.
 	Body string `json:"body"`
 	// Embedding is the vector representation of Body.
-	Embedding []float32 `json:"embedding"`
+	Embedding Vector `json:"embedding"`
 }
 
 // Index is the persistent vector store kept inside the vault root.
