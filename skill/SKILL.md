@@ -172,7 +172,8 @@ the last time something happened.
 
 Pass `--tag calendar` (or whichever life source the vault holds) when the vault
 also contains commit history, or repeated commit subjects will crowd out the
-real threads. Read the sections as: `Ended` is what went quiet, `Started` is
+real threads. Read the sections as: `Silences` are stretches where the whole record
+went quiet and are the largest thing it can be missing, `Ended` is what went quiet, `Started` is
 what is new, `Ongoing` is the steady weight of the record, `Handoffs` are
 successions where one thread stopped and another began, and `Crossings` are days
 where two sources meet.

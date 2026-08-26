@@ -80,6 +80,7 @@ func runWeave(cmd *cobra.Command, _ []string) error {
 	threads := weave.Threads(threadInput, opts)
 	handoffs := weave.Handoffs(threads, weave.DefaultHandoffOptions())
 	overlaps := weave.Overlaps(entries, weaveSources, now)
+	gaps := weave.Gaps(threadInput, weave.DefaultGapOptions(now))
 
 	if jsonOutput {
 		return jsonutil.Encode(cmd.OutOrStdout(), weaveJSON{
@@ -87,12 +88,19 @@ func runWeave(cmd *cobra.Command, _ []string) error {
 			Handoffs: handoffsToJSON(handoffs),
 		}, jsonPretty)
 	}
-	writeWeave(cmd.OutOrStdout(), threads, handoffs, overlaps, weaveLimit)
+	writeWeave(cmd.OutOrStdout(), threads, handoffs, overlaps, gaps, weaveLimit)
 	return nil
 }
 
 // writeWeave renders the human-readable report.
-func writeWeave(w io.Writer, threads []weave.Thread, handoffs []weave.Handoff, overlaps []weave.Overlap, limit int) {
+func writeWeave(
+	w io.Writer,
+	threads []weave.Thread,
+	handoffs []weave.Handoff,
+	overlaps []weave.Overlap,
+	gaps []weave.Gap,
+	limit int,
+) {
 	byStatus := func(s weave.Status) []weave.Thread {
 		var out []weave.Thread
 		for _, t := range threads {
@@ -101,6 +109,14 @@ func writeWeave(w io.Writer, threads []weave.Thread, handoffs []weave.Handoff, o
 			}
 		}
 		return out
+	}
+
+	if len(gaps) > 0 {
+		section(w, "Silences", "stretches where the record itself went quiet")
+		for _, g := range head(gaps, limit) {
+			fmt.Fprintf(w, "  %s to %s  %d months, %d entries (about %.0f/month before, %.0f after)\n",
+				g.From.Format("2006-01"), g.To.Format("2006-01"), g.Months, g.Entries, g.Before, g.After)
+		}
 	}
 
 	ended := byStatus(weave.Ended)

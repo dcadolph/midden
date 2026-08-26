@@ -34,6 +34,8 @@ const (
 	KindBegan Kind = "began"
 	// KindCrossing asks about a day where separate parts of a life met.
 	KindCrossing Kind = "crossing"
+	// KindGap asks what was happening while the record itself went quiet.
+	KindGap Kind = "gap"
 )
 
 // Question is one thing the record cannot answer about itself.
@@ -68,7 +70,13 @@ func DefaultOptions(now time.Time) Options {
 
 // Generate builds the questions a record supports, heaviest first, skipping any
 // whose ID is already answered.
-func Generate(threads []weave.Thread, crossings []weave.Overlap, answered map[string]bool, opts Options) []Question {
+func Generate(
+	threads []weave.Thread,
+	crossings []weave.Overlap,
+	gaps []weave.Gap,
+	answered map[string]bool,
+	opts Options,
+) []Question {
 	var out []Question
 	add := func(q Question) {
 		if q.ID == "" || answered[q.ID] {
@@ -96,13 +104,40 @@ func Generate(threads []weave.Thread, crossings []weave.Overlap, answered map[st
 	for _, c := range crossings {
 		add(crossingQuestion(c))
 	}
+	for _, g := range gaps {
+		add(gapQuestion(g))
+	}
+	// Silences are asked first regardless of weight. A gap and a thread are not
+	// measured on the same scale, and no arithmetic makes them comparable: one
+	// counts occurrences of a commitment, the other counts months of nothing.
+	// A stretch of years the record cannot account for is the larger hole, so
+	// kind decides the order and weight only breaks ties inside a kind.
 	sort.Slice(out, func(i, j int) bool {
+		pi, pj := priority(out[i].Kind), priority(out[j].Kind)
+		if pi != pj {
+			return pi < pj
+		}
 		if out[i].Weight != out[j].Weight {
 			return out[i].Weight > out[j].Weight
 		}
 		return out[i].ID < out[j].ID
 	})
 	return out
+}
+
+// priority orders the kinds of gap, lowest first.
+func priority(k Kind) int {
+	switch k {
+	case KindGap:
+		return 0
+	case KindEnded:
+		return 1
+	case KindCrossing:
+		return 2
+	case KindBegan:
+		return 3
+	}
+	return 4
 }
 
 // endedQuestion asks about a thread that stopped. An ending is the most
@@ -154,6 +189,26 @@ func crossingQuestion(c weave.Overlap) Question {
 		Weight:  total,
 	}
 }
+
+// gapQuestion asks about a stretch where the record fell silent. A silence is
+// the largest thing a record can be missing and the least visible from inside
+// it: a person notices a class ending, never that years went unrecorded.
+func gapQuestion(g weave.Gap) Question {
+	span := fmt.Sprintf("%s to %s", g.From.Format(monthLabel), g.To.Format(monthLabel))
+	return Question{
+		ID:   id(KindGap, span),
+		Kind: KindGap,
+		Prompt: fmt.Sprintf("Your record goes quiet for %s, from %s. What was happening then?",
+			approxMonths(g.Months*30), span),
+		Context: fmt.Sprintf("%d entries across %d months, against about %.0f a month before and %.0f after.",
+			g.Entries, g.Months, g.Before, g.After),
+		When:   g.From,
+		Weight: g.Months,
+	}
+}
+
+// monthLabel renders a month as YYYY-MM.
+const monthLabel = "2006-01"
 
 // dateLayout renders a date as YYYY-MM-DD.
 const dateLayout = "2006-01-02"

@@ -121,7 +121,8 @@ func pendingQuestions(entries []vault.Entry) []interview.Question {
 	if len(crossings) > 3 {
 		crossings = crossings[:3]
 	}
-	return interview.Generate(threads, crossings, answered, interview.DefaultOptions(now))
+	gaps := weave.Gaps(source, weave.DefaultGapOptions(now))
+	return interview.Generate(threads, crossings, gaps, answered, interview.DefaultOptions(now))
 }
 
 // writeQuestions renders up to n outstanding questions.
