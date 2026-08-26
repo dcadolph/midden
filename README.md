@@ -120,6 +120,7 @@ midden chat "when did I last see Mom?"       Ask an LLM a question using recalle
 midden chat --since 30-days-ago "what did I do?"   Answer from every entry in a date range.
 midden chat --sweep "what do you know about my life?"   Answer from the whole vault.
 midden weave --tag calendar                  Show what recurs, when it started, and when it stopped.
+midden ask -i                                Answer a question about a gap in your own record.
 midden reindex                               Build the embedding index used by recall.
 midden reindex --full                        Re-embed everything, needed only after changing provider.
 ```
@@ -139,6 +140,28 @@ once. `--sweep` does the same across whatever is in scope, which is the whole va
 Every `chat` answer also carries a summary counted over every indexed entry in scope: how many entries,
 what span they cover, the tag histogram, and entries per month. Questions about the shape of the record
 are answered from those counts rather than from a handful of retrieved entries.
+
+### Ask
+
+Backfill has a ceiling, and it is worth being plain about where it sits. Calendars record where you were
+scheduled. Commit logs record what you shipped. Both are projections of a life rather than the life, and
+neither carries what you thought or decided, because nothing recorded that at the time. No further import
+fixes this: for anyone who was not already keeping a journal, that material does not exist to import.
+
+`midden ask` closes the gap the only way it can be closed. It reads what weave computed, finds a place
+the record proves something is missing, and asks about it:
+
+```
+William- Martial arts stopped. What happened?
+  216 times over 2.6 years, ending 2025-08-07. Nothing since, 1.0 years ago.
+```
+
+Answer it and the reply becomes an ordinary entry, and that question is never asked again. Questions come
+from arithmetic over the record, never from a model, so nothing is asked about something that did not
+happen. Threads still running are never asked about at all: frequency alone cannot tell a commitment that
+mattered from a chore that recurred, and a vapid prompt teaches you to ignore the next one.
+
+An answer is the first thing in a vault that no import could have produced.
 
 ### Weave
 

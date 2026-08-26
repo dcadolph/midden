@@ -82,6 +82,7 @@ Map the user's question to the smallest matching command:
 | Answer a question about a period | `midden chat --since 2026-03-01 --until 2026-03-31 "what happened"` |
 | Answer a question about the whole record | `midden chat --sweep "what do you know about my life"` (add `--context-chars 6000` for a small local model) |
 | What recurs, started, or stopped | `midden weave --tag calendar` (threads, handoffs, crossings) |
+| Prompt the user about a gap in their record | `midden ask` to see it, `midden ask --answer "..."` to record a reply |
 | Rebuild the embedding index | `midden reindex` (reuses unchanged vectors; `--full` re-embeds everything) |
 | Capture a voice memo (optionally transcribed) | `midden audio --duration 30s --transcribe` |
 | Ingest an .ics calendar export | `midden ingest ics ~/Downloads/cal.ics` (whole file; narrow with `--since`/`--until`) |
@@ -174,6 +175,23 @@ Every number weave prints is counted, not inferred, so quote them exactly and do
 not embellish. Do check a surprising ending before presenting it as fact: run
 `midden search` on the subject to confirm the thread really stopped rather than
 being recorded under different wording.
+
+### Ask: capturing what no import can reach
+
+Imported history covers where the user was and what they produced. It never
+covers what they thought, and for anyone who did not already journal there is
+nothing to import that would. `midden ask` is how that gap closes.
+
+Run `midden ask` when the user asks what they should record, wants a prompt, or
+finishes a backfill and wonders what to do next. Put the question and its
+evidence to them verbatim; the evidence is what makes the question answerable.
+Record the reply with `midden ask --answer "<their words>"`, using their words
+rather than a summary, since the point of the entry is their voice.
+
+Never invent an answer, and never file a plausible-sounding reply on the user's
+behalf. A fabricated entry is worse than a missing one: the whole value of the
+record is that everything in it is true, and a counterfeit memory is
+indistinguishable from a real one once it is written.
 
 ### Backfilling history
 
