@@ -81,6 +81,7 @@ Map the user's question to the smallest matching command:
 | Synthesize an answer about a topic | `midden chat "when did I last see Mom"` |
 | Answer a question about a period | `midden chat --since 2026-03-01 --until 2026-03-31 "what happened"` |
 | Answer a question about the whole record | `midden chat --sweep "what do you know about my life"` (add `--context-chars 6000` for a small local model) |
+| What recurs, started, or stopped | `midden weave --tag calendar` (threads, handoffs, crossings) |
 | Rebuild the embedding index | `midden reindex` (reuses unchanged vectors; `--full` re-embeds everything) |
 | Capture a voice memo (optionally transcribed) | `midden audio --duration 30s --transcribe` |
 | Ingest an .ics calendar export | `midden ingest ics ~/Downloads/cal.ics` (whole file; narrow with `--since`/`--until`) |
@@ -153,6 +154,26 @@ something did not happen merely because it is missing from the quoted entries.
 Prefer `midden recall` when the user wants to find entries.
 Prefer `midden chat` when the user wants a narrated answer that cites entries.
 If recall returns nothing useful, fall back to `midden search` over the raw text.
+
+### Weave: what the user cannot ask for
+
+Use `midden weave` when the user asks what has changed, what they have stopped
+doing, what is new, or asks an open question about their own life over time.
+Recall and chat can only surface what the user already knows to ask about;
+weave reports things nobody wrote down, chiefly endings, because nothing marks
+the last time something happened.
+
+Pass `--tag calendar` (or whichever life source the vault holds) when the vault
+also contains commit history, or repeated commit subjects will crowd out the
+real threads. Read the sections as: `Ended` is what went quiet, `Started` is
+what is new, `Ongoing` is the steady weight of the record, `Handoffs` are
+successions where one thread stopped and another began, and `Crossings` are days
+where two sources meet.
+
+Every number weave prints is counted, not inferred, so quote them exactly and do
+not embellish. Do check a surprising ending before presenting it as fact: run
+`midden search` on the subject to confirm the thread really stopped rather than
+being recorded under different wording.
 
 ### Backfilling history
 
