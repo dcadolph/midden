@@ -1,12 +1,14 @@
 // Package ics parses the small iCalendar subset midden ingests from local .ics exports.
 //
 // The parser handles line folding, VEVENT records, and the SUMMARY, DTSTART,
-// DTEND, LOCATION, DESCRIPTION, UID, and RRULE properties. Components nested
-// inside a VEVENT (VALARM and friends) are skipped so their properties never
-// touch the parent event. TZID parameters resolve through time.LoadLocation
-// with a fallback to the machine's local zone; the UTC suffix Z is honored.
-// Parsed times are anchored to the local zone. Events whose DTSTART is
-// missing or unparseable are dropped and counted rather than returned.
+// DTEND, LOCATION, DESCRIPTION, UID, RRULE, EXDATE, and RECURRENCE-ID
+// properties. Components nested inside a VEVENT (VALARM and friends) are
+// skipped so their properties never touch the parent event. TZID parameters
+// resolve through time.LoadLocation with a fallback to the machine's local
+// zone; the UTC suffix Z is honored. Parsed times are anchored to the local
+// zone. Events whose DTSTART is missing or unparseable are dropped and counted
+// rather than returned. Parse returns series as written; call Expand to turn a
+// recurring series into the occurrences it actually produced.
 package ics
 
 import (
@@ -33,8 +35,30 @@ type Event struct {
 	Description string
 	// AllDay reports whether DTSTART carried a date-only value.
 	AllDay bool
-	// Recurs reports whether the event carries an RRULE. Recurrences are not expanded.
-	Recurs bool
+	// RawRule is the verbatim RRULE value, or empty when the event does not recur.
+	RawRule string
+	// Rule is the parsed RRULE, or nil when the event does not recur or its rule
+	// uses a frequency midden does not expand. A non-empty RawRule with a nil
+	// Rule is a series that will not be expanded.
+	Rule *Recurrence
+	// ExDates are the occurrence start times EXDATE removes from the series.
+	ExDates []time.Time
+	// RecurrenceID identifies which occurrence of a series this event replaces,
+	// or the zero time when the event is not an override.
+	RecurrenceID time.Time
+}
+
+// Recurs reports whether the event carries a recurrence rule.
+func (e Event) Recurs() bool {
+	return e.RawRule != ""
+}
+
+// Duration returns how long the event lasts, or zero when DTEND is absent.
+func (e Event) Duration() time.Duration {
+	if e.End.IsZero() || e.End.Before(e.Start) {
+		return 0
+	}
+	return e.End.Sub(e.Start)
 }
 
 // Parse reads an iCalendar stream and returns every VEVENT it contains plus
@@ -125,7 +149,20 @@ func applyProperty(e *Event, line string) {
 	case "UID":
 		e.UID = unescape(value)
 	case "RRULE":
-		e.Recurs = true
+		e.RawRule = value
+		if rule, err := ParseRRULE(value); err == nil {
+			e.Rule = &rule
+		}
+	case "EXDATE":
+		for v := range strings.SplitSeq(value, ",") {
+			if t, _, ok := parseTime(strings.TrimSpace(v), params); ok {
+				e.ExDates = append(e.ExDates, t)
+			}
+		}
+	case "RECURRENCE-ID":
+		if t, _, ok := parseTime(value, params); ok {
+			e.RecurrenceID = t
+		}
 	case "DTSTART":
 		if t, allDay, ok := parseTime(value, params); ok {
 			e.Start = t

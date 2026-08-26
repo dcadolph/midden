@@ -158,7 +158,7 @@ END:VEVENT
 			Summary: "Timed",
 			Start:   time.Date(2026, 6, 16, 14, 0, 0, 0, time.UTC),
 		}},
-	}, { // Test 9: An RRULE property sets Recurs without expanding occurrences.
+	}, { // Test 9: An RRULE property is kept verbatim and parsed for later expansion.
 		In: strings.NewReader(`BEGIN:VEVENT
 SUMMARY:Standup
 DTSTART:20260616T140000Z
@@ -168,7 +168,13 @@ END:VEVENT
 		WantEvents: []Event{{
 			Summary: "Standup",
 			Start:   time.Date(2026, 6, 16, 14, 0, 0, 0, time.UTC),
-			Recurs:  true,
+			RawRule: "FREQ=WEEKLY;BYDAY=MO",
+			Rule: &Recurrence{
+				Freq:      Weekly,
+				Interval:  1,
+				WeekStart: time.Monday,
+				ByDay:     []WeekDayNum{{Day: time.Monday}},
+			},
 		}},
 	}, { // Test 10: A malformed DTSTART drops the event and counts it as skipped.
 		In: strings.NewReader(`BEGIN:VEVENT
