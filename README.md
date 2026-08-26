@@ -110,7 +110,13 @@ midden chat "when did I last see Mom?"       Ask an LLM a question using recalle
 midden chat --since 30-days-ago "what did I do?"   Answer from every entry in a date range.
 midden chat --sweep "what do you know about my life?"   Answer from the whole vault.
 midden reindex                               Build the embedding index used by recall.
+midden reindex --full                        Re-embed everything, needed only after changing provider.
 ```
+
+Reindex reuses the vector it already has for any entry whose text has not changed, so rebuilding after
+adding a day costs one provider call rather than re-embedding the whole vault. Long rebuilds checkpoint
+as they go and each provider call has its own deadline, so an interrupted backfill resumes from where it
+stopped instead of throwing away the embeddings it already paid for.
 
 `recall` and `chat` both accept `--since` and `--until`, which take any date `midden` understands
 (`2024-03-01`, `30-days-ago`, `monday`). Scoping matters because ranking by similarity alone answers

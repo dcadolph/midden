@@ -2,6 +2,7 @@ package index
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,5 +94,41 @@ func TestDigestEmptyIndex(t *testing.T) {
 	got := (&Index{}).Digest(time.Time{}, time.Time{}, 10)
 	if diff := cmp.Diff(Digest{}, got, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestEmbeddingsByContent(t *testing.T) {
+	t.Parallel()
+	idx := &Index{Entries: []Entry{
+		{Time: day(2024, time.March, 3), Body: "alpha", Embedding: []float32{1, 0}},
+		{Time: day(2024, time.March, 4), Body: "beta", Embedding: []float32{0, 1}},
+		// Same text on a different day shares a vector, because only the body is
+		// ever embedded.
+		{Time: day(2025, time.March, 3), Body: "alpha", Embedding: []float32{1, 0}},
+		// An entry still awaiting its vector contributes nothing to reuse.
+		{Time: day(2025, time.March, 4), Body: "gamma"},
+	}}
+	got := idx.EmbeddingsByContent()
+	if len(got) != 2 {
+		t.Fatalf("want 2 reusable vectors, got %d", len(got))
+	}
+	if diff := cmp.Diff([]float32{1, 0}, got[ContentHash("alpha")]); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+	if _, ok := got[ContentHash("gamma")]; ok {
+		t.Error("want no entry for a body with no embedding")
+	}
+}
+
+func TestContentHashIsStableAndDistinct(t *testing.T) {
+	t.Parallel()
+	// Built rather than written twice, so this checks equal text rather than one
+	// expression compared against itself.
+	rebuilt := "alp" + strings.Repeat("h", 1) + "a"
+	if ContentHash("alpha") != ContentHash(rebuilt) {
+		t.Error("want a stable hash for equal text")
+	}
+	if ContentHash("alpha") == ContentHash("alphb") {
+		t.Error("want different hashes for different text")
 	}
 }
