@@ -30,6 +30,10 @@ func (m *mockChatter) Reply(_ context.Context, system string, history []llm.Mess
 	return m.ReplyFunc(int(m.calls.Add(1)-1), system, history)
 }
 
+// testContextChars is a small context budget, so the sizing tests build a few
+// kilobytes of entries rather than a few megabytes.
+const testContextChars = 3000
+
 // sweepCmd returns a command with output discarded, for driving sweepContext.
 func sweepCmd() *cobra.Command {
 	c := &cobra.Command{}
@@ -44,7 +48,7 @@ func TestSweepContextRendersSmallRangeVerbatim(t *testing.T) {
 		return "", errors.New("summarizer must not run for a range within budget")
 	}}
 	entries := []index.Entry{chunkEntry(0, 10), chunkEntry(1, 10)}
-	got, err := sweepContext(context.Background(), sweepCmd(), chat, "what happened", entries)
+	got, err := sweepContext(context.Background(), sweepCmd(), chat, "what happened", entries, testContextChars)
 	if err != nil {
 		t.Fatalf("sweepContext: %v", err)
 	}
@@ -58,11 +62,11 @@ func TestSweepContextRendersSmallRangeVerbatim(t *testing.T) {
 
 func TestSweepContextSummarizesOversizeRangeInOrder(t *testing.T) {
 	t.Parallel()
-	// Three entries, each two thirds of the chunk budget, force three chunks
-	// and push the total past the sweep budget.
-	size := chatChunkBudget * 2 / 3
+	// Entries at two thirds of the budget force one chunk each and push the
+	// total well past what fits in a single call.
+	size := testContextChars * 2 / 3
 	entries := []index.Entry{}
-	for i := range chatSweepBudget/size + 2 {
+	for i := range 5 {
 		entries = append(entries, chunkEntry(i, size))
 	}
 	chat := &mockChatter{ReplyFunc: func(_ int, _ string, history []llm.Message) (string, error) {
@@ -70,7 +74,7 @@ func TestSweepContextSummarizesOversizeRangeInOrder(t *testing.T) {
 		line := strings.SplitN(history[0].Content, "--- ", 2)[1]
 		return "summary of " + strings.SplitN(line, " ", 2)[0], nil
 	}}
-	got, err := sweepContext(context.Background(), sweepCmd(), chat, "what happened", entries)
+	got, err := sweepContext(context.Background(), sweepCmd(), chat, "what happened", entries, testContextChars)
 	if err != nil {
 		t.Fatalf("sweepContext: %v", err)
 	}
@@ -97,9 +101,9 @@ func TestSweepContextSummarizesOversizeRangeInOrder(t *testing.T) {
 
 func TestSweepContextFailsWhenAChunkFails(t *testing.T) {
 	t.Parallel()
-	size := chatChunkBudget * 2 / 3
+	size := testContextChars * 2 / 3
 	entries := []index.Entry{}
-	for i := range chatSweepBudget/size + 2 {
+	for i := range 5 {
 		entries = append(entries, chunkEntry(i, size))
 	}
 	chat := &mockChatter{ReplyFunc: func(call int, _ string, _ []llm.Message) (string, error) {
@@ -110,7 +114,7 @@ func TestSweepContextFailsWhenAChunkFails(t *testing.T) {
 	}}
 	// A dropped chunk would leave a silent hole in a range the answer claims to
 	// cover, so a single chunk failure must fail the sweep.
-	_, err := sweepContext(context.Background(), sweepCmd(), chat, "what happened", entries)
+	_, err := sweepContext(context.Background(), sweepCmd(), chat, "what happened", entries, testContextChars)
 	if err == nil {
 		t.Fatal("want an error when a chunk summary fails")
 	}
@@ -124,7 +128,7 @@ func TestSweepContextEmptyRange(t *testing.T) {
 	chat := &mockChatter{ReplyFunc: func(int, string, []llm.Message) (string, error) {
 		return "", errors.New("must not run")
 	}}
-	got, err := sweepContext(context.Background(), sweepCmd(), chat, "what happened", nil)
+	got, err := sweepContext(context.Background(), sweepCmd(), chat, "what happened", nil, testContextChars)
 	if err != nil {
 		t.Fatalf("sweepContext: %v", err)
 	}
@@ -135,9 +139,9 @@ func TestSweepContextEmptyRange(t *testing.T) {
 
 func TestSweepContextRespectsCancellation(t *testing.T) {
 	t.Parallel()
-	size := chatChunkBudget * 2 / 3
+	size := testContextChars * 2 / 3
 	entries := []index.Entry{}
-	for i := range chatSweepBudget/size + 2 {
+	for i := range 5 {
 		entries = append(entries, chunkEntry(i, size))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -145,7 +149,7 @@ func TestSweepContextRespectsCancellation(t *testing.T) {
 	chat := &mockChatter{ReplyFunc: func(int, string, []llm.Message) (string, error) {
 		return "", fmt.Errorf("canceled")
 	}}
-	if _, err := sweepContext(ctx, sweepCmd(), chat, "what happened", entries); err == nil {
+	if _, err := sweepContext(ctx, sweepCmd(), chat, "what happened", entries, testContextChars); err == nil {
 		t.Fatal("want an error once the context is canceled")
 	}
 }

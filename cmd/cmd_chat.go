@@ -25,6 +25,9 @@ var (
 // chatSweep answers from every entry in scope rather than the closest matches.
 var chatSweep bool
 
+// chatContextChars caps how much entry text is sent to the model in one call.
+var chatContextChars int
+
 // Timeouts for the chat call. Current models reason before answering, so even a
 // single reply can take minutes over a large record; a sweep may summarize a
 // decade in chunks and is budgeted against that rather than against one reply.
@@ -68,12 +71,17 @@ func init() {
 	chatCmd.Flags().StringVar(&chatUntil, "until", "", "Only consider entries on or before this date.")
 	chatCmd.Flags().BoolVar(&chatSweep, "sweep", false,
 		"Answer from every entry in scope instead of the closest matches, summarizing in chunks when the range is large.")
+	chatCmd.Flags().IntVar(&chatContextChars, "context-chars", defaultContextChars,
+		"Characters of entry text to send in one call. Lower this for a small local model, which is slow on large prompts.")
 	rootCmd.AddCommand(chatCmd)
 }
 
 // runChat embeds the question, gathers the entries in scope, and asks the chat
 // model to answer using only those entries and the corpus summary as evidence.
 func runChat(cmd *cobra.Command, args []string) error {
+	if chatContextChars < 1 {
+		return fmt.Errorf("--context-chars must be at least 1")
+	}
 	span, err := resolveDateRange(chatSince, chatUntil)
 	if err != nil {
 		return err
@@ -109,7 +117,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 	if sweep {
 		entries := rc.Index.InRange(span.From, span.To)
 		count = len(entries)
-		body, err = sweepContext(ctx, cmd, chat, question, entries)
+		body, err = sweepContext(ctx, cmd, chat, question, entries, chatContextChars)
 		if err != nil {
 			return errors.Join(ErrLLM, err)
 		}

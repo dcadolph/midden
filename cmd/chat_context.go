@@ -13,18 +13,18 @@ import (
 	"github.com/dcadolph/midden/llm"
 )
 
-// Budgets for a swept range, measured in characters of entry bodies. A range
-// small enough to fit is sent verbatim; a larger one is summarized in
-// chronological chunks so the answer still covers the whole span rather than a
-// prefix of it.
-const (
-	// chatSweepBudget is the most entry text sent to the model in one prompt.
-	chatSweepBudget = 400000
-	// chatChunkBudget is the most entry text summarized in a single chunk.
-	chatChunkBudget = 60000
-	// chatChunkWorkers bounds how many chunk summaries run at once.
-	chatChunkWorkers = 4
-)
+// defaultContextChars is how much entry text is sent to the model in one call,
+// measured in characters. A range that fits is read whole; a larger one is
+// summarized in chunks of this size so the answer still covers the whole span
+// rather than a prefix of it.
+//
+// The default suits a model with a large context window. A small local model
+// needs a far lower value: at this size it spends minutes per chunk, which turns
+// a sweep into an apparent hang. That is what --context-chars is for.
+const defaultContextChars = 400000
+
+// chatChunkWorkers bounds how many chunk summaries run at once.
+const chatChunkWorkers = 4
 
 // chunkSystem frames the map step of a swept range. The summaries are read only
 // by the reduce step, so they are told to keep the specifics an answer needs
@@ -44,18 +44,19 @@ func sweepContext(
 	chat llm.Chatter,
 	question string,
 	entries []index.Entry,
+	contextChars int,
 ) (string, error) {
 	if len(entries) == 0 {
 		return "", nil
 	}
-	if entriesSize(entries) <= chatSweepBudget {
+	if entriesSize(entries) <= contextChars {
 		return renderEntries(entries), nil
 	}
-	chunks := chunkEntries(entries, chatChunkBudget)
+	chunks := chunkEntries(entries, contextChars)
 	fmt.Fprintf(cmd.ErrOrStderr(),
 		"Range holds %d entries, too many to read at once; summarizing in %d chunks.\n",
 		len(entries), len(chunks))
-	summaries, err := summarizeChunks(ctx, chat, question, chunks)
+	summaries, err := summarizeChunks(ctx, cmd, chat, question, chunks)
 	if err != nil {
 		return "", err
 	}
@@ -65,11 +66,24 @@ func sweepContext(
 // summarizeChunks compresses each chunk concurrently and returns the summaries
 // in chronological order. Any chunk failing fails the sweep, because a silently
 // dropped chunk would leave a hole in a range the answer claims to cover.
-func summarizeChunks(ctx context.Context, chat llm.Chatter, question string, chunks [][]index.Entry) ([]string, error) {
+func summarizeChunks(
+	ctx context.Context,
+	cmd *cobra.Command,
+	chat llm.Chatter,
+	question string,
+	chunks [][]index.Entry,
+) ([]string, error) {
 	out := make([]string, len(chunks))
 	errs := make([]error, len(chunks))
 	sem := make(chan struct{}, chatChunkWorkers)
-	var wg sync.WaitGroup
+	// Summaries finish out of order and a slow model can take minutes per chunk,
+	// so completions are reported as they land rather than leaving the user
+	// watching a still screen. The mutex keeps concurrent lines from interleaving.
+	var (
+		wg       sync.WaitGroup
+		progress sync.Mutex
+		done     int
+	)
 	for i, chunk := range chunks {
 		select {
 		case sem <- struct{}{}:
@@ -88,6 +102,10 @@ func summarizeChunks(ctx context.Context, chat llm.Chatter, question string, chu
 				return
 			}
 			out[i] = "--- " + label + "\n" + strings.TrimSpace(reply)
+			progress.Lock()
+			done++
+			fmt.Fprintf(cmd.ErrOrStderr(), "Summarized %d/%d (%s)\n", done, len(chunks), label)
+			progress.Unlock()
 		}(i, chunk)
 	}
 	wg.Wait()

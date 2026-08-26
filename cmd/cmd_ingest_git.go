@@ -95,11 +95,16 @@ func runIngestGit(cmd *cobra.Command, args []string) error {
 	tags := entryTags(ingestGitTag)
 
 	var entries []vault.Entry
-	dupes := 0
+	dupes, failed := 0, 0
 	for _, repo := range args {
 		commits, err := readCommits(repo, filter)
 		if err != nil {
-			return errors.Join(ErrGit, fmt.Errorf("read %s: %w", repo, err))
+			// One unreadable repository must not cost the user the other thirty-nine.
+			// An empty repository has no HEAD at all, and a backfill sweeping a source
+			// directory will meet those routinely.
+			failed++
+			fmt.Fprintf(cmd.ErrOrStderr(), "%s: skipped (%v)\n", repoName(repo), err)
+			continue
 		}
 		kept := 0
 		for _, c := range commits {
@@ -113,11 +118,17 @@ func runIngestGit(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Fprintf(cmd.ErrOrStderr(), "%s: %d commit(s) in range, %d new\n", repoName(repo), len(commits), kept)
 	}
+	if failed == len(args) {
+		return errors.Join(ErrGit, fmt.Errorf("every repository failed to read (%d of %d)", failed, len(args)))
+	}
 	if err := v.AppendAll(entries); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("append commits: %w", err))
 	}
 	if dupes > 0 {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Skipped %d commit(s) already in the vault.\n", dupes)
+	}
+	if failed > 0 {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Skipped %d unreadable repository/repositories.\n", failed)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Ingested %d commit(s) into the vault (%s).\n", len(entries), span.Label())
 	return nil
