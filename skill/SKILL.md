@@ -58,7 +58,7 @@ Map the user's question to the smallest matching command:
 
 | User wants | Command |
 |---|---|
-| Last single entry | `midden last` |
+| Last single entry | `midden last` (stops at now; `--future` for scheduled entries) |
 | Last N entries | `midden last -n N` or `midden recent -n N` |
 | Everything on a date | `midden on YYYY-MM-DD` (or `today`, `yesterday`, weekday names, `N-units-ago`) |
 | Everything in a range | `midden between FROM TO` |
@@ -87,6 +87,12 @@ Map the user's question to the smallest matching command:
 | Capture a voice memo (optionally transcribed) | `midden audio --duration 30s --transcribe` |
 | Ingest an .ics calendar export | `midden ingest ics ~/Downloads/cal.ics` (whole file; narrow with `--since`/`--until`) |
 | Ingest commit history from repositories | `midden ingest git ~/src/project` (add `--author`, `--since`, `--stat`) |
+
+A vault holding an imported calendar contains appointments that have not happened
+yet. `last` and `recent` stop at the present so they do not report next spring's
+dentist appointment as the most recent thing in the record; pass `--future` when
+the user is asking what is coming up. `stats` reports scheduled entries on their
+own line for the same reason.
 
 Pass `--json` to any of the read commands to receive structured output you can
 parse without regex.

@@ -76,7 +76,7 @@ func Render(w io.Writer, data Data) error {
 // Build prepares Data for Render by walking the vault.
 // The heatmap covers the full year ending on the supplied reference date.
 func Build(title string, v *vault.Vault, now time.Time, topTags int) (Data, error) {
-	stats, err := v.ComputeStats(topTags)
+	stats, err := v.ComputeStats(topTags, now)
 	if err != nil {
 		return Data{}, fmt.Errorf("compute stats: %w", err)
 	}

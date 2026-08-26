@@ -141,6 +141,21 @@ Every `chat` answer also carries a summary counted over every indexed entry in s
 what span they cover, the tag histogram, and entries per month. Questions about the shape of the record
 are answered from those counts rather than from a handful of retrieved entries.
 
+### Scheduled entries
+
+A vault holding an imported calendar contains appointments that have not happened yet, which quietly
+breaks anything meaning "latest". `last` and `recent` therefore stop at now, and `stats` reports what is
+booked ahead separately from the span of what actually happened:
+
+```
+Span
+  First: 2022-08-18 07:00:00
+  Last:  2026-08-26 15:10:23
+  Ahead: 264 scheduled, through 2027-03-12
+```
+
+Pass `--future` to `last` or `recent` when you do want what is coming.
+
 ### Ask
 
 Backfill has a ceiling, and it is worth being plain about where it sits. Calendars record where you were
