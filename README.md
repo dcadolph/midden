@@ -30,6 +30,7 @@ go install .
 ```
 midden init                          Create the vault, write a vault README and gitignore.
 midden ingest ics calendar.ics       Backfill past events from a calendar export.
+midden ingest git ~/src/project      Backfill what you were working on, from commit history.
 midden add "text"                    Append an entry to today.
 midden add "text" --tag work         Append with tags.
 midden today                         Open today's day file in the editor.
@@ -59,7 +60,9 @@ midden import - --date 2026-06-10            Read stdin and file it on a chosen 
 midden audio                                 Record a voice memo and append it to today.
 midden audio --duration 30s --transcribe     Record for 30s then transcribe with OpenAI Whisper.
 midden ingest ics calendar.ics               Append calendar events from an .ics export.
-midden ingest ics calendar.ics --from 2015-01-01   Narrow the range to ingest.
+midden ingest ics calendar.ics --since 2015-01-01   Narrow the range to ingest.
+midden ingest git ~/src/one ~/src/two        Append commit history from local repositories.
+midden ingest git ~/src/work --author me@example.com --stat
 ```
 
 Ingest reads the whole export by default, because backfilling years of calendar history is the point
@@ -72,6 +75,13 @@ the same import twice changes nothing.
 Rules using `BYSETPOS`, `BYYEARDAY`, or `BYWEEKNO` are not expanded on those parts, and a frequency
 outside daily, weekly, monthly, and yearly is not expanded at all. Ingest counts and reports both cases
 rather than passing off a partial calendar as a complete one.
+
+`ingest git` appends one entry per commit across any number of local repositories. A calendar says where
+you were; commit history says what you were working on, and the two together reconstruct a working life
+far better than either alone. Commits are filed by author date, so rebased or cherry-picked work still
+lands on the day it was written. Merge commits are skipped unless `--merges` is given, `--author` narrows
+a shared repository to your own commits, and `--stat` adds changed-file and line counts at the cost of a
+diff per commit. Commits already in the vault are skipped by hash.
 
 </details>
 

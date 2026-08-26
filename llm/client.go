@@ -18,16 +18,19 @@ import (
 const EnvChatMaxTokens = "MIDDEN_CHAT_MAX_TOKENS" //nolint:gosec // Environment variable name, not a credential.
 
 // Default provider models and endpoints. They live in one block so provider
-// drift is a one-line fix; each has an environment override.
+// drift is a one-line fix; each has an environment override. The reply budget
+// is generous because current Claude models reason before answering and that
+// reasoning is charged against the same cap as the reply, so a tight budget
+// truncates the answer rather than the thinking.
 const (
-	defaultAnthropicModel   = "claude-sonnet-4-6"
+	defaultAnthropicModel   = "claude-opus-5"
 	defaultOpenAIChatModel  = "gpt-4o-mini"
 	defaultOllamaChatModel  = "llama3.2"
 	defaultOpenAIEmbedModel = "text-embedding-3-small"
 	defaultVoyageEmbedModel = "voyage-3"
 	defaultOllamaEmbedModel = "nomic-embed-text"
 	defaultOllamaHost       = "http://localhost:11434"
-	defaultChatMaxTokens    = 4096
+	defaultChatMaxTokens    = 16000
 )
 
 // retryAttempts is the total try count for retryable provider failures.

@@ -184,3 +184,35 @@ func TestChatMaxTokensOverride(t *testing.T) {
 		t.Errorf("invalid value must fall back to default, got %d", got)
 	}
 }
+
+func TestAnthropicChatSurfacesRefusal(t *testing.T) {
+	stubHTTP(t, stubResponse{
+		Status: 200,
+		Body:   `{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber"},"content":[]}`,
+	})
+	c := &anthropicChat{apiKey: "test", model: "claude-opus-5", maxTokens: 1024}
+	// A refusal is an HTTP 200 with no content blocks, so reading the blocks
+	// without checking would report an empty answer as a real one.
+	reply, err := c.Reply(context.Background(), "system", []Message{{Role: "user", Content: "hi"}})
+	if err == nil {
+		t.Fatalf("want an error for a refused request, got reply %q", reply)
+	}
+	if !strings.Contains(err.Error(), "cyber") {
+		t.Errorf("want the refusal category surfaced, got %v", err)
+	}
+}
+
+func TestAnthropicChatReturnsText(t *testing.T) {
+	stubHTTP(t, stubResponse{
+		Status: 200,
+		Body:   `{"stop_reason":"end_turn","content":[{"type":"thinking","text":""},{"type":"text","text":"answer"}]}`,
+	})
+	c := &anthropicChat{apiKey: "test", model: "claude-opus-5", maxTokens: 1024}
+	reply, err := c.Reply(context.Background(), "system", []Message{{Role: "user", Content: "hi"}})
+	if err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
+	if diff := cmp.Diff("answer", reply); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
