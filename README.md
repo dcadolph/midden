@@ -59,7 +59,19 @@ midden import - --date 2026-06-10            Read stdin and file it on a chosen 
 midden audio                                 Record a voice memo and append it to today.
 midden audio --duration 30s --transcribe     Record for 30s then transcribe with OpenAI Whisper.
 midden ingest ics calendar.ics               Append calendar events from an .ics export.
+midden ingest ics calendar.ics --from 2015-01-01   Narrow the range to ingest.
 ```
+
+Ingest reads the whole export by default, because backfilling years of calendar history is the point
+of it. Recurring series are expanded into the occurrences they actually produced, so a weekly one-to-one
+running since 2019 contributes every week rather than a single event in 2019. `EXDATE` cancellations are
+honored and instances the calendar moved replace the occurrence they override, so a rescheduled meeting
+appears once at its real time rather than twice. Occurrences already in the vault are skipped, so running
+the same import twice changes nothing.
+
+Rules using `BYSETPOS`, `BYYEARDAY`, or `BYWEEKNO` are not expanded on those parts, and a frequency
+outside daily, weekly, monthly, and yearly is not expanded at all. Ingest counts and reports both cases
+rather than passing off a partial calendar as a complete one.
 
 </details>
 
