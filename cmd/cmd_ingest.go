@@ -40,19 +40,19 @@ var ingestICSCmd = &cobra.Command{
 	RunE: runIngestICS,
 }
 
-// ingestFrom and ingestTo narrow the date range pulled out of the calendar.
+// ingestSince and ingestUntil narrow the date range pulled out of the calendar.
 // Empty means the range is derived from the file itself.
 var (
-	ingestFrom string
-	ingestTo   string
-	ingestTag  []string
+	ingestSince string
+	ingestUntil string
+	ingestTag   []string
 )
 
 func init() {
-	ingestICSCmd.Flags().StringVar(&ingestFrom, "from", "",
-		"Start of the date range to ingest (default: the earliest event in the file).")
-	ingestICSCmd.Flags().StringVar(&ingestTo, "to", "",
-		"End of the date range to ingest (default: the later of the last event in the file and today).")
+	ingestICSCmd.Flags().StringVar(&ingestSince, "since", "",
+		"Only ingest events on or after this date (default: the earliest event in the file).")
+	ingestICSCmd.Flags().StringVar(&ingestUntil, "until", "",
+		"Only ingest events on or before this date (default: the later of the last event in the file and today).")
 	ingestICSCmd.Flags().StringSliceVarP(&ingestTag, "tag", "t", []string{"calendar"}, "Tags to attach to every ingested event.")
 	ingestCmd.AddCommand(ingestICSCmd)
 	rootCmd.AddCommand(ingestCmd)
@@ -69,7 +69,7 @@ func runIngestICS(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.ErrOrStderr(),
 			"Warning: skipped %d event(s) with a missing or unparseable DTSTART.\n", skipped)
 	}
-	span, err := ingestWindow(events, ingestFrom, ingestTo)
+	span, err := ingestWindow(events, ingestSince, ingestUntil)
 	if err != nil {
 		return err
 	}
@@ -177,16 +177,15 @@ func reportExpansion(cmd *cobra.Command, r ics.ExpandReport) {
 	}
 }
 
-// existingOccurrences collects the calendar occurrences already in the vault
-// across the window. The whole range is read once here rather than a day at a
-// time per event, because a backfill asks about far more events than there are
-// days to hold them.
-func existingOccurrences(v *vault.Vault, span dateRange) (map[string]bool, error) {
+// forEachEntryInRange calls fn for every entry inside the window, reading each
+// day once. Ingestion asks what the vault already holds for far more incoming
+// records than there are days to hold them, so the range is walked once here
+// rather than re-read per record.
+func forEachEntryInRange(v *vault.Vault, span dateRange, fn func(vault.Entry)) error {
 	days, err := v.ListDays()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	seen := map[string]bool{}
 	for _, d := range days {
 		if !span.From.IsZero() && d.Before(dayStart(span.From)) {
 			continue
@@ -196,11 +195,24 @@ func existingOccurrences(v *vault.Vault, span dateRange) (map[string]bool, error
 		}
 		entries, err := v.ReadDay(d)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, e := range entries {
-			seen[occurrenceKey(bodyUID(e.Body), firstLine(e.Body), e.Time)] = true
+			fn(e)
 		}
+	}
+	return nil
+}
+
+// existingOccurrences collects the calendar occurrences already in the vault
+// across the window.
+func existingOccurrences(v *vault.Vault, span dateRange) (map[string]bool, error) {
+	seen := map[string]bool{}
+	err := forEachEntryInRange(v, span, func(e vault.Entry) {
+		seen[occurrenceKey(bodyUID(e.Body), firstLine(e.Body), e.Time)] = true
+	})
+	if err != nil {
+		return nil, err
 	}
 	return seen, nil
 }
@@ -220,8 +232,15 @@ func occurrenceKey(uid, headline string, start time.Time) string {
 // bodyUID returns the calendar UID recorded in an entry body, or empty when the
 // entry did not come from a calendar ingest.
 func bodyUID(body string) string {
+	return bodyMarker(body, uidPrefix)
+}
+
+// bodyMarker returns the value of the given ingest marker line in an entry body,
+// or empty when the body carries no such line. The prefix must start a line, so
+// prose merely mentioning it is never mistaken for a marker.
+func bodyMarker(body, prefix string) string {
 	for line := range strings.SplitSeq(body, "\n") {
-		if after, ok := strings.CutPrefix(strings.TrimSpace(line), uidPrefix); ok {
+		if after, ok := strings.CutPrefix(strings.TrimSpace(line), prefix); ok {
 			return after
 		}
 	}

@@ -25,11 +25,12 @@ var (
 // chatSweep answers from every entry in scope rather than the closest matches.
 var chatSweep bool
 
-// Timeouts for the chat call. A sweep may summarize a decade in chunks, so it
-// gets a budget measured against that rather than against a single reply.
+// Timeouts for the chat call. Current models reason before answering, so even a
+// single reply can take minutes over a large record; a sweep may summarize a
+// decade in chunks and is budgeted against that rather than against one reply.
 const (
-	chatTimeout      = 90 * time.Second
-	chatSweepTimeout = 15 * time.Minute
+	chatTimeout      = 5 * time.Minute
+	chatSweepTimeout = 30 * time.Minute
 )
 
 // digestTopTags caps the tag histogram supplied with every answer.
