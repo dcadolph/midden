@@ -24,11 +24,21 @@ type Stats struct {
 	LastEntry time.Time `json:"last_entry"`
 	// TopTags is the tag histogram ordered by descending count then label.
 	TopTags []util.TagCount `json:"top_tags,omitempty"`
+	// Scheduled is the number of entries dated after the observation time. An
+	// imported calendar carries appointments that have not happened yet, and
+	// counting them among what the record holds overstates it.
+	Scheduled int `json:"scheduled"`
+	// LastPast is the latest entry at or before the observation time, which is
+	// what a person means by the most recent thing in the record.
+	LastPast time.Time `json:"last_past"`
 }
 
 // ComputeStats walks every entry once and assembles the summary.
-// TopTags is capped at the given limit; pass a non-positive limit to include every tag.
-func (v *Vault) ComputeStats(topTagLimit int) (Stats, error) {
+// TopTags is capped at the given limit; pass a non-positive limit to include
+// every tag. Entries dated after now are counted separately as scheduled rather
+// than folded into the record's span, so an imported calendar does not make the
+// vault appear to run into next year.
+func (v *Vault) ComputeStats(topTagLimit int, now time.Time) (Stats, error) {
 	var s Stats
 	days, err := v.ListDays()
 	if err != nil {
@@ -52,6 +62,12 @@ func (v *Vault) ComputeStats(topTagLimit int) (Stats, error) {
 			}
 			if e.Time.After(s.LastEntry) {
 				s.LastEntry = e.Time
+			}
+			switch {
+			case !now.IsZero() && e.Time.After(now):
+				s.Scheduled++
+			case e.Time.After(s.LastPast):
+				s.LastPast = e.Time
 			}
 			for _, t := range e.Tags {
 				tagCounts[strings.ToLower(t)]++

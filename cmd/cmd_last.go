@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"time"
+
 	"errors"
 	"fmt"
 
@@ -17,8 +19,13 @@ var lastCmd = &cobra.Command{
 	RunE:  runLast,
 }
 
+// lastFuture includes entries dated after now, which an imported calendar holds.
+var lastFuture bool
+
 func init() {
 	lastCmd.Flags().IntVarP(&lastCount, "count", "n", 1, "Number of recent entries to show.")
+	lastCmd.Flags().BoolVar(&lastFuture, "future", false,
+		"Include entries dated after now, such as calendar appointments that have not happened yet.")
 	rootCmd.AddCommand(lastCmd)
 }
 
@@ -28,7 +35,11 @@ func runLast(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	entries, err := v.Recent(lastCount)
+	cutoff := time.Time{}
+	if !lastFuture {
+		cutoff = time.Now()
+	}
+	entries, err := v.RecentBefore(lastCount, cutoff)
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("read recent: %w", err))
 	}

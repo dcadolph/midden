@@ -12,7 +12,7 @@ import (
 func TestComputeStats(t *testing.T) {
 	t.Parallel()
 	v := seedFixture(t)
-	got, err := v.ComputeStats(0)
+	got, err := v.ComputeStats(0, time.Time{})
 	if err != nil {
 		t.Fatalf("ComputeStats: %v", err)
 	}
@@ -23,6 +23,9 @@ func TestComputeStats(t *testing.T) {
 		Tags:       2,
 		FirstEntry: time.Date(2026, 6, 16, 9, 14, 23, 0, time.Local),
 		LastEntry:  time.Date(2026, 6, 18, 10, 0, 0, 0, time.Local),
+		// With no observation time nothing counts as scheduled, so the last past
+		// entry is simply the last entry.
+		LastPast: time.Date(2026, 6, 18, 10, 0, 0, 0, time.Local),
 		TopTags: []util.TagCount{
 			{Tag: "life", Count: 1},
 			{Tag: "project", Count: 1},
