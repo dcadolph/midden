@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dcadolph/midden/internal/util"
 	"github.com/dcadolph/midden/internal/vault"
 )
 
@@ -169,7 +170,7 @@ func buildDayRows(days []time.Time, counts map[string]dayMetric) []DayRow {
 
 // buildTagBars scales tag counts to percent widths against the top tag.
 // The top tag gets width 100 and every other tag gets at least width 4.
-func buildTagBars(tags []vault.TagCount) []TagBar {
+func buildTagBars(tags []util.TagCount) []TagBar {
 	if len(tags) == 0 {
 		return nil
 	}

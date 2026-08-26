@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+
+	"github.com/dcadolph/midden/internal/util"
 )
 
 func TestComputeStats(t *testing.T) {
@@ -21,7 +23,7 @@ func TestComputeStats(t *testing.T) {
 		Tags:       2,
 		FirstEntry: time.Date(2026, 6, 16, 9, 14, 23, 0, time.Local),
 		LastEntry:  time.Date(2026, 6, 18, 10, 0, 0, 0, time.Local),
-		TopTags: []TagCount{
+		TopTags: []util.TagCount{
 			{Tag: "life", Count: 1},
 			{Tag: "project", Count: 1},
 		},

@@ -95,8 +95,21 @@ midden tag work                              List entries with a tag.
 midden tags                                  Show the tag histogram.
 midden recall "token rotation strategy"      Semantic search over indexed entries.
 midden chat "when did I last see Mom?"       Ask an LLM a question using recalled entries as evidence.
+midden chat --since 30-days-ago "what did I do?"   Answer from every entry in a date range.
+midden chat --sweep "what do you know about my life?"   Answer from the whole vault.
 midden reindex                               Build the embedding index used by recall.
 ```
+
+`recall` and `chat` both accept `--since` and `--until`, which take any date `midden` understands
+(`2024-03-01`, `30-days-ago`, `monday`). Scoping matters because ranking by similarity alone answers
+"what did I write about X" well and "what happened last March" badly: the closest matches to a question
+about a period are often entries from other periods. Giving `chat` a range makes it read every entry in
+that range instead of the closest few, summarizing in chunks when the range is too large to read at
+once. `--sweep` does the same across whatever is in scope, which is the whole vault by default.
+
+Every `chat` answer also carries a summary counted over every indexed entry in scope: how many entries,
+what span they cover, the tag histogram, and entries per month. Questions about the shape of the record
+are answered from those counts rather than from a handful of retrieved entries.
 
 </details>
 
