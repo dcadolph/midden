@@ -119,6 +119,7 @@ midden recall "token rotation strategy"      Semantic search over indexed entrie
 midden chat "when did I last see Mom?"       Ask an LLM a question using recalled entries as evidence.
 midden chat --since 30-days-ago "what did I do?"   Answer from every entry in a date range.
 midden chat --sweep "what do you know about my life?"   Answer from the whole vault.
+midden weave --tag calendar                  Show what recurs, when it started, and when it stopped.
 midden reindex                               Build the embedding index used by recall.
 midden reindex --full                        Re-embed everything, needed only after changing provider.
 ```
@@ -138,6 +139,24 @@ once. `--sweep` does the same across whatever is in scope, which is the whole va
 Every `chat` answer also carries a summary counted over every indexed entry in scope: how many entries,
 what span they cover, the tag histogram, and entries per month. Questions about the shape of the record
 are answered from those counts rather than from a handful of retrieved entries.
+
+### Weave
+
+Search answers what you already know to ask about. `midden weave` answers what you cannot ask.
+
+A person can recall what they did but cannot perceive absence, because nothing marks the last time
+something happened. Weave groups the record into threads, measures each one's own cadence, and reports
+which have gone quiet for far longer than their rhythm allows. It also finds handoffs, where one thread
+ended and another began soon after, and crossings, the days where separate sources both recorded
+something and so can say what neither says alone.
+
+Every figure is counted rather than inferred. There is no model in the detection path and nothing to
+invent. Threads are grouped by the meaningful words in a title rather than the title itself, because a
+handwritten calendar records one standing arrangement under many spellings, and grouping on the exact
+string splits it into fragments that each appear to end whenever the wording drifts.
+
+Use `--tag calendar` to weave a life source on its own. Commit history repeats boilerplate subjects
+across repositories, which crowds out real threads.
 
 `--context-chars` sets how much entry text goes to the model in one call. The default suits a model with
 a large context window. A small local model needs a much lower value, because it spends minutes on a
