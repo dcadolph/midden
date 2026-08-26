@@ -188,6 +188,11 @@ which have gone quiet for far longer than their rhythm allows. It also finds han
 ended and another began soon after, and crossings, the days where separate sources both recorded
 something and so can say what neither says alone.
 
+It also finds silences: stretches where the record itself went quiet, bounded by activity on both sides
+so the start and end of a record are never mistaken for holes. A thread ending is one commitment
+stopping. A silence is the record failing, which is both larger and completely invisible from inside it,
+since a person notices a class ending but never that years went unrecorded.
+
 Every figure is counted rather than inferred. There is no model in the detection path and nothing to
 invent. Threads are grouped by the meaningful words in a title rather than the title itself, because a
 handwritten calendar records one standing arrangement under many spellings, and grouping on the exact
