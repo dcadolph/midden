@@ -80,6 +80,7 @@ func runWeave(cmd *cobra.Command, _ []string) error {
 	}
 	opts := weave.DefaultOptions(now)
 	opts.MinCount = weaveMin
+	opts.SameKeys, _ = loadEquivalences(entries)
 	threads := weave.Threads(threadInput, opts)
 	handoffs := weave.Handoffs(threads, weave.DefaultHandoffOptions())
 	overlaps := weave.Overlaps(entries, weaveSources, now)

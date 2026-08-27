@@ -96,6 +96,10 @@ type Options struct {
 	// DormantTolerance scales a thread's longest previous gap when deciding
 	// whether its current silence is seasonal rather than final.
 	DormantTolerance float64
+	// SameKeys maps a thread key to the key it should be counted under. Entries
+	// come from identity verdicts a person explicitly accepted; the arithmetic
+	// itself never invents one.
+	SameKeys map[string]string
 	// MergeSimilarity is how much two word sets must overlap to be treated as
 	// one thread, from zero to one. Word-set equality alone still splits a
 	// commitment recorded with an extra word attached, and each fragment then
@@ -132,9 +136,15 @@ func Threads(entries []vault.Entry, opts Options) []Thread {
 		if !opts.Now.IsZero() && e.Time.After(opts.Now) {
 			continue
 		}
+		if e.Bookkeeping() {
+			continue
+		}
 		key := NormalizeTitle(e.Body)
 		if key == "" {
 			continue
+		}
+		if canon, ok := opts.SameKeys[key]; ok && canon != "" {
+			key = canon
 		}
 		grouped[key] = append(grouped[key], e.Time)
 		if _, ok := labels[key]; !ok {

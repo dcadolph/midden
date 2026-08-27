@@ -37,6 +37,9 @@ type PeopleOptions struct {
 	MinMentions int
 	// MaxContexts caps the example headlines kept per person.
 	MaxContexts int
+	// SameNames maps a lowercase name to the lowercase name it should be
+	// counted under, from identity verdicts a person explicitly accepted.
+	SameNames map[string]string
 	// Exclude drops names the caller knows are not people, matched
 	// case-insensitively. Weekday, month, and common calendar words are always
 	// excluded.
@@ -113,6 +116,9 @@ func People(entries []vault.Entry, opts PeopleOptions) []Person {
 		if !opts.Now.IsZero() && e.Time.After(opts.Now) {
 			continue
 		}
+		if e.Bookkeeping() {
+			continue
+		}
 		head := headline(e.Body)
 
 		// First: which tokens in this headline carry person-grammar.
@@ -129,7 +135,13 @@ func People(entries []vault.Entry, opts PeopleOptions) []Person {
 		for _, raw := range nameToken.FindAllString(head, -1) {
 			name := possessiveSuffix.ReplaceAllString(raw, "")
 			lower := strings.ToLower(name)
-			if notNames[lower] || excluded[lower] || len(name) < 3 || seen[lower] {
+			if notNames[lower] || excluded[lower] || len(name) < 3 {
+				continue
+			}
+			if canon, ok := opts.SameNames[lower]; ok && canon != "" {
+				lower = canon
+			}
+			if seen[lower] {
 				continue
 			}
 			seen[lower] = true
