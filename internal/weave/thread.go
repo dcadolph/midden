@@ -9,6 +9,7 @@
 package weave
 
 import (
+	"math"
 	"regexp"
 	"sort"
 	"strings"
@@ -50,6 +51,11 @@ type Thread struct {
 	// yearly show and a weekly class both look silent in July; only this tells
 	// them apart.
 	MaxGap int
+	// GapSpread is the coefficient of variation of the thread's gaps: zero for a
+	// metronome, above one for an erratic pattern. Regularity is what earns a
+	// quick verdict; an irregular thread has to be silent far longer before its
+	// silence means anything.
+	GapSpread float64
 	// SilentDays is how long the thread has gone quiet at the observation date.
 	SilentDays int
 	// SpanDays is how long the thread ran from first to last occurrence.
@@ -170,6 +176,7 @@ func buildThread(key, label string, times []time.Time, opts Options) Thread {
 		Last:      last,
 		MedianGap: medianGapDays(times),
 		MaxGap:    maxGapDays(times),
+		GapSpread: gapSpread(times),
 		SpanDays:  daysBetween(first, last),
 	}
 	if !opts.Now.IsZero() {
@@ -181,9 +188,16 @@ func buildThread(key, label string, times []time.Time, opts Options) Thread {
 
 // classify decides where a thread stands. Silence is judged against the
 // thread's own cadence rather than a fixed window, so a weekly class and an
-// annual tradition are both measured fairly.
+// annual tradition are both measured fairly, and the cadence bar stretches with
+// the thread's own irregularity: a metronomic weekly class earns a verdict at
+// four missed beats, while an erratic social thread with the same median gap
+// has always had long pauses, so the same silence proves nothing about it.
 func classify(t Thread, opts Options) Status {
-	limit := t.MedianGap * opts.SilenceFactor
+	spread := t.GapSpread
+	if spread > 1.5 {
+		spread = 1.5
+	}
+	limit := int(float64(t.MedianGap*opts.SilenceFactor) * (1 + spread))
 	if limit < opts.MinSilenceDays {
 		limit = opts.MinSilenceDays
 	}
@@ -219,6 +233,31 @@ func medianGapDays(times []time.Time) int {
 		return gaps[mid]
 	}
 	return (gaps[mid-1] + gaps[mid]) / 2
+}
+
+// gapSpread returns the coefficient of variation of the spans between
+// consecutive occurrences, or zero when there are fewer than three.
+func gapSpread(times []time.Time) float64 {
+	if len(times) < 3 {
+		return 0
+	}
+	gaps := make([]float64, 0, len(times)-1)
+	mean := 0.0
+	for i := 1; i < len(times); i++ {
+		g := float64(daysBetween(times[i-1], times[i]))
+		gaps = append(gaps, g)
+		mean += g
+	}
+	mean /= float64(len(gaps))
+	if mean <= 0 {
+		return 0
+	}
+	varsum := 0.0
+	for _, g := range gaps {
+		d := g - mean
+		varsum += d * d
+	}
+	return math.Sqrt(varsum/float64(len(gaps))) / mean
 }
 
 // maxGapDays returns the longest span between consecutive occurrences.

@@ -192,3 +192,48 @@ func TestGapsBySourceDoesNotRepeatAWholeRecordSilence(t *testing.T) {
 		t.Errorf("want one whole-record silence and no per-source copy, got %d and %d", whole, perSource)
 	}
 }
+
+func TestErasFindTheChapters(t *testing.T) {
+	t.Parallel()
+	var entries []vault.Entry
+	entries = append(entries, span(2013, time.January, 48, 4)...)  // sparse years
+	entries = append(entries, span(2017, time.January, 48, 0)...)  // silence
+	entries = append(entries, span(2021, time.January, 48, 40)...) // dense years
+	got := Eras(entries, DefaultEraOptions(time.Date(2025, time.January, 1, 0, 0, 0, 0, time.Local)))
+	if len(got) != 3 {
+		t.Fatalf("want three eras, got %d: %+v", len(got), got)
+	}
+	// The middle era is the silence and its boundaries have to land on the year
+	// marks, give or take a month of segmentation slack.
+	mid := got[1]
+	if mid.PerMonth > 1 {
+		t.Errorf("want the middle era near zero volume, got %.1f/month", mid.PerMonth)
+	}
+	if mid.From.Year() != 2017 || mid.To.Year() != 2020 {
+		t.Errorf("want the silence spanning 2017-2020, got %s to %s", mid.From, mid.To)
+	}
+	if got[0].PerMonth >= got[2].PerMonth {
+		t.Errorf("want the last era denser than the first, got %.1f vs %.1f", got[0].PerMonth, got[2].PerMonth)
+	}
+}
+
+func TestErasDoNotShatterAFlatRecord(t *testing.T) {
+	t.Parallel()
+	// A steady record has one chapter, and a greedy splitter with no brake
+	// would cut it into MaxEras pieces anyway.
+	entries := span(2020, time.January, 48, 20)
+	got := Eras(entries, DefaultEraOptions(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.Local)))
+	if len(got) != 1 {
+		t.Errorf("want one era for a flat record, got %d: %+v", len(got), got)
+	}
+}
+
+func TestErasEmptyAndTinyRecords(t *testing.T) {
+	t.Parallel()
+	if got := Eras(nil, DefaultEraOptions(time.Now())); got != nil {
+		t.Errorf("want nil for an empty record, got %+v", got)
+	}
+	if got := Eras(monthly(2026, time.March, 5), DefaultEraOptions(time.Now())); got != nil {
+		t.Errorf("want nil for a record shorter than two eras, got %+v", got)
+	}
+}
