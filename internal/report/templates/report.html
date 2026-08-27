@@ -53,7 +53,7 @@ main { padding: 32px 40px; max-width: 1100px; }
 section { margin-bottom: 48px; }
 h2 { font-size: 22px; margin: 0 0 10px; }
 .section-desc { font-size: 14px; color: var(--muted); margin: 0 0 16px; max-width: 72ch; }
-.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
 .card {
   background: var(--card); border: 1px solid var(--border); padding: 16px;
   border-radius: 6px; cursor: pointer;
@@ -73,6 +73,10 @@ h2 { font-size: 22px; margin: 0 0 10px; }
 .heatmap .cell.l3 { background: var(--hot); }
 .heatmap .cell[title] { cursor: pointer; }
 .tagbars { display: flex; flex-direction: column; gap: 4px; }
+.tagbar.era { grid-template-columns: 150px 1fr minmax(240px, auto); }
+.threadlist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.threadlist li { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; }
+h3 { font-size: 16px; margin: 20px 0 4px; }
 .tagbar { display: grid; grid-template-columns: 140px 1fr 40px; align-items: center; gap: 8px; }
 .tagbar .bar { background: var(--accent); height: 12px; border-radius: 3px; }
 .tagbar .count { color: var(--muted); text-align: right; }
@@ -122,6 +126,11 @@ details > summary {
   <h1>{{.Title}}</h1>
   <ul>
     <li><button type="button" class="navlink" data-jump="summary">Summary</button></li>
+    {{if .Eras}}<li><button type="button" class="navlink" data-jump="eras">Eras</button></li>{{end}}
+    {{if or .Ended .Dormant .Ongoing}}<li><button type="button" class="navlink" data-jump="threads">Threads</button></li>{{end}}
+    {{if .Silences}}<li><button type="button" class="navlink" data-jump="silences">Silences</button></li>{{end}}
+    {{if .Handoffs}}<li><button type="button" class="navlink" data-jump="handoffs">Handoffs</button></li>{{end}}
+    {{if .People}}<li><button type="button" class="navlink" data-jump="people">People</button></li>{{end}}
     <li><button type="button" class="navlink" data-jump="heatmap">Heatmap</button></li>
     <li><button type="button" class="navlink" data-jump="tags">Tags</button></li>
     <li><button type="button" class="navlink" data-jump="days">Days</button></li>
@@ -148,8 +157,106 @@ details > summary {
         <div class="label">Streak (days)</div>
         <div class="value">{{.Streak}}</div>
       </div>
+      <div class="card" data-jump="days" role="link" tabindex="0">
+        <div class="label">Written by you</div>
+        <div class="value">{{.Stats.Authored}}</div>
+      </div>
     </div>
   </section>
+
+  {{if .Eras}}
+  <section id="eras">
+    <h2>Eras</h2>
+    <p class="section-desc">
+      The chapters of the record, found by where its monthly volume shifts. Bars
+      are scaled logarithmically so the quiet chapters stay visible next to the
+      loud ones.
+    </p>
+    <div class="tagbars">
+      {{range .Eras}}
+      <div class="tagbar era">
+        <span>{{.Span}}</span>
+        <div class="bar" style="width: {{.Width}}%"></div>
+        <span class="count">{{.Entries}} entries, ~{{.PerMonth}}/month over {{.Months}} months</span>
+      </div>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  {{if or .Ended .Dormant .Ongoing}}
+  <section id="threads">
+    <h2>Threads</h2>
+    <p class="section-desc">
+      Recurring commitments, grouped by the meaningful words in their titles and
+      judged against their own cadence. Nothing here is inferred; every figure is
+      counted from the entries.
+    </p>
+    {{if .Ended}}
+    <h3>Ended</h3>
+    <p class="section-desc">Things that stopped without anything marking the last one.</p>
+    <ul class="threadlist">
+      {{range .Ended}}<li><strong>{{.Label}}</strong> — {{.Count}}x over {{.Span}}. {{.Detail}}</li>{{end}}
+    </ul>
+    {{end}}
+    {{if .Dormant}}
+    <h3>Between seasons</h3>
+    <p class="section-desc">Quiet, but each has come back from a gap this long before.</p>
+    <ul class="threadlist">
+      {{range .Dormant}}<li><strong>{{.Label}}</strong> — {{.Count}}x over {{.Span}}. {{.Detail}}</li>{{end}}
+    </ul>
+    {{end}}
+    {{if .Ongoing}}
+    <h3>Ongoing</h3>
+    <p class="section-desc">The steady weight of the record.</p>
+    <ul class="threadlist">
+      {{range .Ongoing}}<li><strong>{{.Label}}</strong> — {{.Count}}x over {{.Span}}. {{.Detail}}</li>{{end}}
+    </ul>
+    {{end}}
+  </section>
+  {{end}}
+
+  {{if .Silences}}
+  <section id="silences">
+    <h2>Silences</h2>
+    <p class="section-desc">
+      Stretches where the record itself went quiet, bounded by activity on both
+      sides. A silence in one source can be hidden by volume in another, so each
+      source is checked on its own as well.
+    </p>
+    <ul class="threadlist">
+      {{range .Silences}}<li><strong>{{.Span}}</strong> — {{.Months}} months, {{.Scope}}. {{.Detail}}</li>{{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  {{if .Handoffs}}
+  <section id="handoffs">
+    <h2>Handoffs</h2>
+    <p class="section-desc">
+      One thread ended and another began soon after, within the same subject.
+      Nobody writes these successions down; they fall out of the dates.
+    </p>
+    <ul class="threadlist">
+      {{range .Handoffs}}<li><strong>{{.From}}</strong> → <strong>{{.To}}</strong>. {{.Detail}}</li>{{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  {{if .People}}
+  <section id="people">
+    <h2>People</h2>
+    <p class="section-desc">
+      The names the record keeps mentioning. A name counts as a person only when
+      the record uses person-grammar about it somewhere, such as a possessive or
+      a companion preposition. Names that recurred and then faded carry their
+      last-seen date.
+    </p>
+    <ul class="threadlist">
+      {{range .People}}<li><strong>{{.Name}}</strong> — {{.Mentions}}x over {{.Span}}.{{if .LastSeen}} Last seen {{.LastSeen}}.{{end}}</li>{{end}}
+    </ul>
+  </section>
+  {{end}}
 
   <section id="heatmap">
     <h2>Heatmap</h2>
