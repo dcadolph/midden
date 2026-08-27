@@ -120,6 +120,7 @@ midden chat "when did I last see Mom?"       Ask an LLM a question using recalle
 midden chat --since 30-days-ago "what did I do?"   Answer from every entry in a date range.
 midden chat --sweep "what do you know about my life?"   Answer from the whole vault.
 midden weave --tag calendar                  Show what recurs, when it started, and when it stopped.
+midden people                                List the people your record mentions, and who has faded.
 midden ask -i                                Answer a question about a gap in your own record.
 midden reindex                               Build the embedding index used by recall.
 midden reindex --full                        Re-embed everything, needed only after changing provider.
@@ -160,6 +161,20 @@ entry: it removes the last thing you wrote, and nothing you wrote lives in the f
 `streak` counts only days you actually wrote something. A backfilled vault has entries on thousands of
 days the person never wrote a word, and a streak counted over imported events would congratulate you for
 appointments you merely attended.
+
+### People
+
+`midden people` counts every name in the record and reports who recurs, over what span, and who has
+gone quiet. Capitalization alone cannot tell a person from a commit verb, so a name only counts as a
+person when the record uses person-grammar about it somewhere: a possessive ("Jax's grooming") or a
+companion preposition ("sleepover with Kayla"). Blocklists rot; grammar does not. A name that recurred
+for a long stretch and then vanished for over a year is flagged with its last-seen date, because a
+faded relationship is exactly the kind of fact nobody writes down.
+
+Weave also segments the whole record into eras: stretches of consistent volume found by where the
+monthly counts shift, on a log scale so the difference between four entries a month and none weighs
+more than the difference between four hundred and one hundred. The chapters of a record fall out
+without anyone naming them.
 
 ### Ask
 

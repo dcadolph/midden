@@ -82,6 +82,7 @@ Map the user's question to the smallest matching command:
 | Answer a question about a period | `midden chat --since 2026-03-01 --until 2026-03-31 "what happened"` |
 | Answer a question about the whole record | `midden chat --sweep "what do you know about my life"` (add `--context-chars 6000` for a small local model) |
 | What recurs, started, or stopped | `midden weave --tag calendar` (threads, handoffs, crossings) |
+| Who the record mentions, who faded | `midden people` (grammar-evidenced names, last-seen flags) |
 | Prompt the user about a gap in their record | `midden ask` to see it, `midden ask --answer "..."` to record a reply |
 | Rebuild the embedding index | `midden reindex` (reuses unchanged vectors; `--full` re-embeds everything) |
 | Capture a voice memo (optionally transcribed) | `midden audio --duration 30s --transcribe` |
