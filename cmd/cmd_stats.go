@@ -65,6 +65,12 @@ func runStats(cmd *cobra.Command, _ []string) error {
 			fmt.Fprintf(w, "  Ahead: %d scheduled, through %s\n", s.Scheduled, s.LastEntry.Format(layoutDate))
 		}
 	}
+	heading("Yours")
+	if s.Authored == 0 {
+		fmt.Fprintln(w, "  Written by you: 0 entries. Everything here so far was imported.")
+	} else {
+		fmt.Fprintf(w, "  Written by you: %d entries, last on %s\n", s.Authored, s.LastAuthored.Format(layoutDate))
+	}
 	if len(s.TopTags) > 0 {
 		heading("Top tags")
 		for _, c := range s.TopTags {

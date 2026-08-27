@@ -104,3 +104,36 @@ func TestComputeStatsZeroNowCountsNothingScheduled(t *testing.T) {
 		t.Errorf("want nothing scheduled without an observation time, got %d", s.Scheduled)
 	}
 }
+
+func TestComputeStatsCountsAuthoredSeparately(t *testing.T) {
+	t.Parallel()
+	v, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	now := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.Local)
+	entries := []Entry{
+		{Time: now.AddDate(0, 0, -10), Body: "Standup\nICS-UID: a@b"},
+		{Time: now.AddDate(0, 0, -9), Body: "Fix bug\nGIT-COMMIT: deadbeef"},
+		{Time: now.AddDate(0, 0, -8), Body: "I wrote this."},
+		{Time: now.AddDate(0, 0, -2), Body: "And this."},
+		// A scheduled import must count as neither past nor authored-latest.
+		{Time: now.AddDate(0, 1, 0), Body: "Dentist\nICS-UID: c@d"},
+	}
+	if err := v.AppendAll(entries); err != nil {
+		t.Fatalf("AppendAll: %v", err)
+	}
+	s, err := v.ComputeStats(0, now)
+	if err != nil {
+		t.Fatalf("ComputeStats: %v", err)
+	}
+	// This is the number the experiment turns on, so it must never drift into
+	// counting imports.
+	if diff := cmp.Diff(2, s.Authored); diff != "" {
+		t.Errorf("authored mismatch (-want +got):\n%s", diff)
+	}
+	want := now.AddDate(0, 0, -2)
+	if !s.LastAuthored.Equal(want) {
+		t.Errorf("want last authored %s, got %s", want, s.LastAuthored)
+	}
+}

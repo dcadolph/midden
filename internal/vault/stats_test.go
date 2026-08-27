@@ -26,6 +26,9 @@ func TestComputeStats(t *testing.T) {
 		// With no observation time nothing counts as scheduled, so the last past
 		// entry is simply the last entry.
 		LastPast: time.Date(2026, 6, 18, 10, 0, 0, 0, time.Local),
+		// The fixture's entries are all hand-written, so every one is authored.
+		Authored:     3,
+		LastAuthored: time.Date(2026, 6, 18, 10, 0, 0, 0, time.Local),
 		TopTags: []util.TagCount{
 			{Tag: "life", Count: 1},
 			{Tag: "project", Count: 1},
