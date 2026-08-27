@@ -66,7 +66,7 @@ func TestStreakCountsConsecutiveDays(t *testing.T) {
 			t.Fatalf("Append: %v", err)
 		}
 	}
-	streak, err := v.Streak(today)
+	streak, err := v.Streak(today, nil)
 	if err != nil {
 		t.Fatalf("Streak: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestStreakIsZeroWhenTodayMissing(t *testing.T) {
 	if err := v.Append(Entry{Time: today.AddDate(0, 0, -1), Body: "yesterday"}); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
-	streak, err := v.Streak(today)
+	streak, err := v.Streak(today, nil)
 	if err != nil {
 		t.Fatalf("Streak: %v", err)
 	}

@@ -101,9 +101,14 @@ func (v *Vault) TagCounts(limit int) ([]util.TagCount, error) {
 	return util.SortedCounts(tagCounts, limit), nil
 }
 
-// Streak returns the number of consecutive days ending today on which at least one entry was written.
-// A day with no entry breaks the streak, including today.
-func (v *Vault) Streak(today time.Time) (int, error) {
+// Streak returns the number of consecutive days ending today on which at least
+// one entry satisfying keep was written. A day with no such entry breaks the
+// streak, including today. A nil keep counts every entry.
+//
+// The filter exists because a backfilled vault has entries on thousands of days
+// the person never wrote a word: a streak counted over imported calendar events
+// congratulates them for appointments they merely attended.
+func (v *Vault) Streak(today time.Time, keep func(Entry) bool) (int, error) {
 	today = dayStart(today)
 	days, err := v.ListDays()
 	if err != nil {
@@ -115,8 +120,11 @@ func (v *Vault) Streak(today time.Time) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if len(entries) > 0 {
-			have[dayKey(d)] = true
+		for _, e := range entries {
+			if keep == nil || keep(e) {
+				have[dayKey(d)] = true
+				break
+			}
 		}
 	}
 	streak := 0

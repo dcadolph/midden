@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dcadolph/midden/internal/vault"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +26,9 @@ func runStreak(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	n, err := v.Streak(time.Now())
+	// Only days the person actually wrote something count. Imported calendar
+	// events would otherwise report a streak for appointments merely attended.
+	n, err := v.Streak(time.Now(), vault.Entry.Authored)
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("streak: %w", err))
 	}

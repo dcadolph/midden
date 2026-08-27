@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"time"
+
 	"bytes"
 	"errors"
 	"fmt"
@@ -36,7 +38,15 @@ func runUndo(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("list days: %w", err))
 	}
+	// Undo removes the last thing the person wrote, and nothing they wrote lives
+	// in the future. An imported calendar does: without this cutoff the walk
+	// starts at next year's appointments and deletes one of those instead, which
+	// is the single most destructive way the scheduled-entry problem can land.
+	today := dayStart(time.Now())
 	for i := len(days) - 1; i >= 0; i-- {
+		if days[i].After(today) {
+			continue
+		}
 		path := v.DayPath(days[i])
 		data, err := v.ReadBytes(path)
 		if err != nil {
