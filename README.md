@@ -262,7 +262,7 @@ midden verify                                Check that every day file parses cl
 midden export -f json                        Dump every entry as JSON.
 midden export -f jsonl                       Dump every entry as JSON Lines.
 midden export -f md                          Dump every entry as concatenated markdown.
-midden report html -o report.html            Render an HTML report (dark mode aware).
+midden report html -o your-life.html         Render the whole record's shape as one page.
 midden path                                  Print the vault root.
 midden path today                            Print the path to today's day file.
 ```
