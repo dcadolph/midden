@@ -193,7 +193,9 @@ Run `midden ask` when the user asks what they should record, wants a prompt, or
 finishes a backfill and wonders what to do next. Put the question and its
 evidence to them verbatim; the evidence is what makes the question answerable.
 Record the reply with `midden ask --answer "<their words>"`, using their words
-rather than a summary, since the point of the entry is their voice.
+rather than a summary, since the point of the entry is their voice. Use
+`midden ask --skip` when the user says a question is not worth answering, so it
+leaves the queue for good rather than being put to them again.
 
 Never invent an answer, and never file a plausible-sounding reply on the user's
 behalf. A fabricated entry is worse than a missing one: the whole value of the

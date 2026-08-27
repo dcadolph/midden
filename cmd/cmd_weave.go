@@ -129,6 +129,16 @@ func writeWeave(
 		fmt.Fprintln(w, "  nothing has gone quiet")
 	}
 
+	dormant := byStatus(weave.Dormant)
+	if len(dormant) > 0 {
+		section(w, "Between seasons", "quiet, but they have come back from a gap this long before")
+		for _, t := range head(dormant, limit) {
+			fmt.Fprintf(w, "  %-44s %4dx, last %s, quiet %s (longest gap before: %s)\n",
+				truncate(t.Label, 44), t.Count, t.Last.Format(layoutDate),
+				months(t.SilentDays), months(t.MaxGap))
+		}
+	}
+
 	emerging := byStatus(weave.Emerging)
 	section(w, "Started", "threads that began recently")
 	for _, t := range head(emerging, limit) {
