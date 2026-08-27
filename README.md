@@ -195,6 +195,14 @@ which have gone quiet for far longer than their rhythm allows. It also finds han
 ended and another began soon after, and crossings, the days where separate sources both recorded
 something and so can say what neither says alone.
 
+Threads are grouped by the meaningful words in a title, which survives the drift of a handwritten
+calendar without merging things that are genuinely different. A word added to a short title is a subject,
+not noise: "Doctor appt" and "Hannah doctor appt" overlap heavily but the second says whose appointment
+it was, and folding them together would treat two people's appointments as one thread and then report a
+gap spanning the distance between two unrelated lives. `--explain` lists the headlines behind every
+thread, because a claim that something ended rests entirely on what was grouped together, and that has to
+be checkable before it is believed.
+
 A thread that has gone quiet is not automatically over. Something that has already come back from a gap
 this long before is between seasons, not finished, and weave says so rather than announcing an ending
 that never happened. A spring show silent in August has simply not come round yet.

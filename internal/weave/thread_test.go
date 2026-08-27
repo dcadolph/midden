@@ -271,3 +271,108 @@ func TestMaxGapRecordsTheLongestReturn(t *testing.T) {
 		t.Errorf("want the median to stay near the usual weekly rhythm, got %d days", got.MedianGap)
 	}
 }
+
+func TestMergeDoesNotAbsorbATitleThatNamesNobody(t *testing.T) {
+	t.Parallel()
+	var entries []vault.Entry
+	// One person's appointments, recorded several ways.
+	for i := range 6 {
+		entries = append(entries, on(2024, time.Month(1+i), 10, "Hannah- doctor appt"))
+	}
+	// A generic appointment naming nobody, years earlier. It could be anyone's.
+	for i := range 6 {
+		entries = append(entries, on(2015, time.Month(1+i), 10, "Doctor appt"))
+	}
+	threads := Threads(entries, DefaultOptions(observed))
+	// Folding these together would treat two people's appointments as one
+	// thread and report a gap spanning the distance between two unrelated lives.
+	for _, th := range threads {
+		if len(th.Variants) > 1 {
+			t.Errorf("want the unnamed appointments kept separate, merged: %v", th.Variants)
+		}
+	}
+	if len(threads) != 2 {
+		t.Errorf("want two distinct threads, got %d: %v", len(threads), labelsOf(threads))
+	}
+}
+
+func TestMergeStillFoldsPhrasingOfOneCommitment(t *testing.T) {
+	t.Parallel()
+	// Every one of these names the same two people doing the same thing, so an
+	// extra word is drift rather than a change of subject.
+	entries := []vault.Entry{
+		on(2025, time.January, 4, "Hannah- sleepover with Kayla"),
+		on(2025, time.February, 8, "Hannah- sleepover @ Kayla's"),
+		on(2025, time.March, 15, "Hannah- sleepover w/ Kayla"),
+		on(2025, time.April, 19, "Hannah- Kayla and Sara sleepover"),
+		on(2025, time.May, 24, "Hannah - sleepover with Kayla"),
+	}
+	threads := Threads(entries, DefaultOptions(observed))
+	if len(threads) != 1 {
+		t.Fatalf("want one thread, got %d: %v", len(threads), labelsOf(threads))
+	}
+	if threads[0].Count != 5 {
+		t.Errorf("want all five occurrences merged, got %d", threads[0].Count)
+	}
+	if len(threads[0].Variants) != 5 {
+		t.Errorf("want every phrasing recorded for audit, got %v", threads[0].Variants)
+	}
+}
+
+func TestVariantsAreRecordedAndSorted(t *testing.T) {
+	t.Parallel()
+	entries := []vault.Entry{
+		on(2025, time.January, 4, "William- martial arts"),
+		on(2025, time.January, 11, "William- Martial arts"),
+		on(2025, time.January, 18, "William- martial arts ⚔️"),
+		on(2025, time.January, 25, "William- martial arts"),
+		on(2025, time.February, 1, "William- martial arts"),
+	}
+	threads := Threads(entries, DefaultOptions(observed))
+	if len(threads) != 1 {
+		t.Fatalf("want one thread, got %d", len(threads))
+	}
+	got := threads[0].Variants
+	if len(got) != 3 {
+		t.Errorf("want the three distinct spellings recorded, got %v", got)
+	}
+	for i := 1; i < len(got); i++ {
+		if got[i] < got[i-1] {
+			t.Errorf("want variants in a stable order, got %v", got)
+		}
+	}
+}
+
+func TestAddsSubject(t *testing.T) {
+	t.Parallel()
+	set := func(words ...string) map[string]bool {
+		m := map[string]bool{}
+		for _, w := range words {
+			m[w] = true
+		}
+		return m
+	}
+	tests := []struct {
+		Name string
+		A    map[string]bool
+		B    map[string]bool
+		Want bool
+	}{
+		{"short title gains a name", set("appt", "doctor"), set("appt", "doctor", "hannah"), true},
+		{"longer title gains a word", set("hannah", "kayla", "sleepover"), set("hannah", "kayla", "sleepover", "sara"), false},
+		{"neither is a subset", set("hannah", "acro"), set("hannah", "piano"), false},
+		{"identical sets", set("hannah", "acro"), set("hannah", "acro"), false},
+	}
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			t.Parallel()
+			if got := addsSubject(test.A, test.B); got != test.Want {
+				t.Errorf("want %v, got %v", test.Want, got)
+			}
+			// The check must not depend on argument order.
+			if got := addsSubject(test.B, test.A); got != test.Want {
+				t.Errorf("want %v regardless of order, got %v", test.Want, got)
+			}
+		})
+	}
+}
