@@ -19,6 +19,10 @@ import (
 // question is never put twice.
 const askedPrefix = "MIDDEN-ASKED: "
 
+// askedPrefixLabel introduces the question an answer was given to, kept out of
+// the headline so the entry reads as the person's own words.
+const askedPrefixLabel = "In answer to: "
+
 // Ask options.
 var (
 	askAnswer      string
@@ -26,6 +30,7 @@ var (
 	askTags        []string
 	askInteractive bool
 	askList        bool
+	askSkip        bool
 )
 
 // askCmd puts a question the record cannot answer about itself.
@@ -49,6 +54,8 @@ func init() {
 	askCmd.Flags().StringSliceVarP(&askTags, "tag", "t", []string{"answer"}, "Tags to attach to the answer.")
 	askCmd.Flags().BoolVarP(&askInteractive, "interactive", "i", false, "Ask, then read the answer from stdin.")
 	askCmd.Flags().BoolVar(&askList, "list", false, "List pending questions without answering.")
+	askCmd.Flags().BoolVar(&askSkip, "skip", false,
+		"Dismiss the next question without answering it, so it is never asked again.")
 	rootCmd.AddCommand(askCmd)
 }
 
@@ -66,6 +73,25 @@ func runAsk(cmd *cobra.Command, _ []string) error {
 	questions := pendingQuestions(entries)
 	if len(questions) == 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), "Nothing to ask: the record has no unexplained gaps yet.")
+		return nil
+	}
+
+	if askSkip {
+		q := questions[0]
+		// A dismissal is recorded the same way an answer is, because a queue that
+		// keeps returning a question the person has already rejected trains them
+		// to stop reading it at all.
+		entry := vault.Entry{
+			Time: time.Now(),
+			Tags: entryTags([]string{"skipped"}),
+			Body: fmt.Sprintf("Not worth recording.\n%s%s\n%s%s",
+				askedPrefixLabel, q.Prompt, askedPrefix, q.ID),
+		}
+		if err := v.Append(entry); err != nil {
+			return errors.Join(ErrVault, fmt.Errorf("record dismissal: %w", err))
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Dismissed: %s\n", q.Prompt)
+		fmt.Fprintf(cmd.ErrOrStderr(), "%d question(s) still outstanding.\n", len(questions)-1)
 		return nil
 	}
 
@@ -89,7 +115,12 @@ func runAsk(cmd *cobra.Command, _ []string) error {
 	entry := vault.Entry{
 		Time: time.Now(),
 		Tags: entryTags(askTags),
-		Body: fmt.Sprintf("%s\n\n%s\n%s%s", q.Prompt, strings.TrimSpace(answer), askedPrefix, q.ID),
+		// The answer leads and the question trails as attribution. An entry's
+		// headline is what every other command shows and what weave groups on, so
+		// putting the prompt first would make the record display midden's
+		// questions back instead of the person's own words.
+		Body: fmt.Sprintf("%s\n\n%s%s\n%s%s",
+			strings.TrimSpace(answer), askedPrefixLabel, q.Prompt, askedPrefix, q.ID),
 	}
 	if err := v.Append(entry); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("append answer: %w", err))

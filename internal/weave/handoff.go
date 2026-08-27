@@ -103,7 +103,9 @@ func Milestones(threads []Thread) []Milestone {
 			out = append(out, Milestone{When: t.Last, Kind: "ended", Thread: t})
 		case Emerging:
 			out = append(out, Milestone{When: t.First, Kind: "began", Thread: t})
-		case Ongoing:
+		case Ongoing, Dormant:
+			// Neither is a turning point: one is still running, the other is
+			// between seasons and has not turned anywhere.
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {

@@ -61,11 +61,15 @@ type Options struct {
 	// MinWeight is the smallest thread weight worth asking about, which keeps
 	// incidental patterns from producing questions.
 	MinWeight int
+	// MinSpanDays is how long a thread must have run before its ending is worth
+	// explaining. A school-year reminder repeated for a term is logistics, not a
+	// commitment, and asking why it stopped mistakes a to-do list for a life.
+	MinSpanDays int
 }
 
 // DefaultOptions returns generation settings suited to a personal record.
 func DefaultOptions(now time.Time) Options {
-	return Options{Now: now, MinWeight: 300}
+	return Options{Now: now, MinWeight: 300, MinSpanDays: 180}
 }
 
 // Generate builds the questions a record supports, heaviest first, skipping any
@@ -90,9 +94,13 @@ func Generate(
 		}
 		switch t.Status {
 		case weave.Ended:
-			add(endedQuestion(t))
+			if t.SpanDays >= opts.MinSpanDays {
+				add(endedQuestion(t))
+			}
 		case weave.Emerging:
 			add(beganQuestion(t))
+		case weave.Dormant:
+			// Between seasons, not over. Nothing to explain.
 		case weave.Ongoing:
 			// A thread still running is not a gap. Asking about one produces
 			// questions about groceries and school holidays, because frequency

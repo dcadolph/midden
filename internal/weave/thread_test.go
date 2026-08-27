@@ -218,3 +218,56 @@ func labelsOf(threads []Thread) []string {
 	}
 	return out
 }
+
+func TestClassifyDormantForSeasonalThreads(t *testing.T) {
+	t.Parallel()
+	var entries []vault.Entry
+	// A show that happens each spring. In August it is silent by months, but it
+	// has returned from a gap this long every year of its life.
+	for y := 2023; y <= 2026; y++ {
+		entries = append(entries, on(y, time.April, 25, "Haylie- spring show"))
+		entries = append(entries, on(y, time.April, 26, "Haylie- spring show"))
+	}
+	threads := Threads(entries, Options{
+		Now: observed, MinCount: 5, SilenceFactor: 4, MinSilenceDays: 90,
+		DormantTolerance: 1.3, MergeSimilarity: 0.6,
+	})
+	got := find(t, threads, "Haylie- spring show")
+	if got.Status != Dormant {
+		t.Errorf("want a seasonal thread read as dormant, got %s (silent %d, max gap %d)",
+			got.Status, got.SilentDays, got.MaxGap)
+	}
+}
+
+func TestClassifyEndedWhenSilenceExceedsAnyPreviousGap(t *testing.T) {
+	t.Parallel()
+	// A weekly class that ran steadily and then stopped for far longer than it
+	// ever paused. Nothing about its history explains this silence.
+	entries := weekly(2024, time.January, 6, 40, "William- martial arts")
+	threads := Threads(entries, DefaultOptions(observed))
+	got := find(t, threads, "William- martial arts")
+	if got.Status != Ended {
+		t.Errorf("want a genuinely stopped thread read as ended, got %s (silent %d, max gap %d)",
+			got.Status, got.SilentDays, got.MaxGap)
+	}
+}
+
+func TestMaxGapRecordsTheLongestReturn(t *testing.T) {
+	t.Parallel()
+	entries := []vault.Entry{
+		on(2024, time.January, 1, "Thing"),
+		on(2024, time.January, 8, "Thing"),
+		// A long pause, then it comes back.
+		on(2025, time.January, 8, "Thing"),
+		on(2025, time.January, 15, "Thing"),
+		on(2025, time.January, 22, "Thing"),
+	}
+	threads := Threads(entries, Options{Now: observed, MinCount: 5, SilenceFactor: 4, MinSilenceDays: 90})
+	got := find(t, threads, "Thing")
+	if got.MaxGap < 360 {
+		t.Errorf("want the year-long pause recorded, got %d days", got.MaxGap)
+	}
+	if got.MedianGap > 30 {
+		t.Errorf("want the median to stay near the usual weekly rhythm, got %d days", got.MedianGap)
+	}
+}

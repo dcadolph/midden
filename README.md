@@ -171,7 +171,14 @@ William- Martial arts stopped. What happened?
   216 times over 2.6 years, ending 2025-08-07. Nothing since, 1.0 years ago.
 ```
 
-Answer it and the reply becomes an ordinary entry, and that question is never asked again. Questions come
+Answer it and the reply becomes an ordinary entry, with your words leading and the question trailing as
+attribution, so the record shows what you said rather than what midden asked. That question is never
+asked again. `--skip` dismisses one for good, because a queue that keeps returning a question you have
+already rejected teaches you to stop reading it.
+
+Questions are only raised about things worth explaining. A commitment that ran for months and stopped
+qualifies; a school-year reminder repeated for one term does not, and neither does anything merely
+between seasons. Questions come
 from arithmetic over the record, never from a model, so nothing is asked about something that did not
 happen. Threads still running are never asked about at all: frequency alone cannot tell a commitment that
 mattered from a chore that recurred, and a vapid prompt teaches you to ignore the next one.
@@ -187,6 +194,10 @@ something happened. Weave groups the record into threads, measures each one's ow
 which have gone quiet for far longer than their rhythm allows. It also finds handoffs, where one thread
 ended and another began soon after, and crossings, the days where separate sources both recorded
 something and so can say what neither says alone.
+
+A thread that has gone quiet is not automatically over. Something that has already come back from a gap
+this long before is between seasons, not finished, and weave says so rather than announcing an ending
+that never happened. A spring show silent in August has simply not come round yet.
 
 It also finds silences: stretches where the record itself went quiet, bounded by activity on both sides
 so the start and end of a record are never mistaken for holes. A thread ending is one commitment

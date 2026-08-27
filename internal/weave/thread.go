@@ -24,6 +24,9 @@ type Status string
 const (
 	// Ongoing means the thread is still within its usual cadence.
 	Ongoing Status = "ongoing"
+	// Dormant means the thread is quiet but has already come back from a gap
+	// this long before, so the silence is its rhythm rather than its end.
+	Dormant Status = "dormant"
 	// Ended means the thread has been silent far longer than its cadence.
 	Ended Status = "ended"
 	// Emerging means the thread began recently and is still establishing.
@@ -43,6 +46,10 @@ type Thread struct {
 	Last  time.Time
 	// MedianGap is the typical number of days between occurrences.
 	MedianGap int
+	// MaxGap is the longest the thread has ever gone quiet and come back. A
+	// yearly show and a weekly class both look silent in July; only this tells
+	// them apart.
+	MaxGap int
 	// SilentDays is how long the thread has gone quiet at the observation date.
 	SilentDays int
 	// SpanDays is how long the thread ran from first to last occurrence.
@@ -75,6 +82,9 @@ type Options struct {
 	MinSilenceDays int
 	// EmergingDays is how recently a thread must have started to count as new.
 	EmergingDays int
+	// DormantTolerance scales a thread's longest previous gap when deciding
+	// whether its current silence is seasonal rather than final.
+	DormantTolerance float64
 	// MergeSimilarity is how much two word sets must overlap to be treated as
 	// one thread, from zero to one. Word-set equality alone still splits a
 	// commitment recorded with an extra word attached, and each fragment then
@@ -85,12 +95,13 @@ type Options struct {
 // DefaultOptions returns detection settings suited to a personal record.
 func DefaultOptions(now time.Time) Options {
 	return Options{
-		Now:             now,
-		MinCount:        5,
-		SilenceFactor:   4,
-		MinSilenceDays:  90,
-		EmergingDays:    180,
-		MergeSimilarity: 0.6,
+		Now:              now,
+		MinCount:         5,
+		SilenceFactor:    4,
+		MinSilenceDays:   90,
+		EmergingDays:     180,
+		MergeSimilarity:  0.6,
+		DormantTolerance: 1.3,
 	}
 }
 
@@ -146,6 +157,7 @@ func buildThread(key, label string, times []time.Time, opts Options) Thread {
 		First:     first,
 		Last:      last,
 		MedianGap: medianGapDays(times),
+		MaxGap:    maxGapDays(times),
 		SpanDays:  daysBetween(first, last),
 	}
 	if !opts.Now.IsZero() {
@@ -164,6 +176,13 @@ func classify(t Thread, opts Options) Status {
 		limit = opts.MinSilenceDays
 	}
 	if t.SilentDays > limit {
+		// A thread that has already returned from a gap this long is between
+		// seasons, not over. Calling that an ending would ask a person to
+		// explain the end of something that has not ended, which is worse than
+		// not asking: it asserts a false fact about their life.
+		if t.MaxGap > 0 && t.SilentDays <= int(float64(t.MaxGap)*opts.DormantTolerance) {
+			return Dormant
+		}
 		return Ended
 	}
 	if opts.EmergingDays > 0 && !opts.Now.IsZero() && daysBetween(t.First, opts.Now) <= opts.EmergingDays {
@@ -188,6 +207,17 @@ func medianGapDays(times []time.Time) int {
 		return gaps[mid]
 	}
 	return (gaps[mid-1] + gaps[mid]) / 2
+}
+
+// maxGapDays returns the longest span between consecutive occurrences.
+func maxGapDays(times []time.Time) int {
+	longest := 0
+	for i := 1; i < len(times); i++ {
+		if g := daysBetween(times[i-1], times[i]); g > longest {
+			longest = g
+		}
+	}
+	return longest
 }
 
 // daysBetween returns whole days from a to b, never negative.
