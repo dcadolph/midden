@@ -3,6 +3,7 @@ package vault
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -58,6 +59,95 @@ func (v *Vault) Append(entry Entry) error {
 		return err
 	}
 	return nil
+}
+
+// AppendAll writes every entry to its day file, grouping by day so each file is
+// touched once rather than once per entry. This matters for bulk ingestion: on
+// an encrypted vault Append decrypts and re-encrypts the whole day file per
+// call, so appending a backfill entry at a time costs one full crypt cycle per
+// event. Entries keep their given order within each day, every body is
+// validated before anything is written, and the batch runs under a single
+// advisory lock.
+func (v *Vault) AppendAll(entries []Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	for i, e := range entries {
+		if strings.TrimSpace(e.Body) == "" {
+			return fmt.Errorf("entry %d body is empty", i)
+		}
+	}
+	byDay := map[string][]Entry{}
+	var order []string
+	for _, e := range entries {
+		key := e.Time.Format("2006-01-02")
+		if _, ok := byDay[key]; !ok {
+			order = append(order, key)
+		}
+		byDay[key] = append(byDay[key], e)
+	}
+	sort.Strings(order)
+	lock, err := flock.Acquire(v.LockPath())
+	if err != nil {
+		return fmt.Errorf("acquire vault lock: %w", err)
+	}
+	defer func() { _ = lock.Close() }()
+	for _, key := range order {
+		if err := v.appendDay(byDay[key]); err != nil {
+			return fmt.Errorf("append %s: %w", key, err)
+		}
+	}
+	return nil
+}
+
+// appendDay writes a run of same-day entries to their day file. The caller
+// holds the vault lock.
+func (v *Vault) appendDay(entries []Entry) error {
+	path, err := v.EnsureDayFile(entries[0].Time)
+	if err != nil {
+		return err
+	}
+	var block strings.Builder
+	for _, e := range entries {
+		block.WriteString(e.Serialize())
+	}
+	if v.Passphrase == "" {
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600) //nolint:gosec // Day path derives from the vault directory.
+		if err != nil {
+			return fmt.Errorf("open day file: %w", err)
+		}
+		defer func() { _ = f.Close() }()
+		if _, err := f.WriteString(block.String()); err != nil {
+			return fmt.Errorf("append entries: %w", err)
+		}
+		return nil
+	}
+	existing, err := v.readDayBytes(path)
+	if err != nil {
+		return err
+	}
+	return v.writeDayBytes(path, append(existing, []byte(block.String())...))
+}
+
+// ImportMarkers are the body lines that mark an entry as produced by an
+// importer rather than written by the person. They live here so every command
+// judging "did the person write this" shares one definition.
+var ImportMarkers = []string{"ICS-UID: ", "GIT-COMMIT: "}
+
+// Authored reports whether the entry was written by the person rather than
+// imported. The distinction is load-bearing: a backfilled vault holds thousands
+// of imported entries, and any feature that means to measure the person's own
+// writing must not count them.
+func (e Entry) Authored() bool {
+	for line := range strings.SplitSeq(e.Body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		for _, m := range ImportMarkers {
+			if strings.HasPrefix(trimmed, m) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // Serialize renders the entry as the markdown block written to a day file.

@@ -30,6 +30,7 @@ go install .
 ```
 midden init                          Create the vault, write a vault README and gitignore.
 midden ingest ics calendar.ics       Backfill past events from a calendar export.
+midden ingest git ~/src/project      Backfill what you were working on, from commit history.
 midden add "text"                    Append an entry to today.
 midden add "text" --tag work         Append with tags.
 midden today                         Open today's day file in the editor.
@@ -59,7 +60,28 @@ midden import - --date 2026-06-10            Read stdin and file it on a chosen 
 midden audio                                 Record a voice memo and append it to today.
 midden audio --duration 30s --transcribe     Record for 30s then transcribe with OpenAI Whisper.
 midden ingest ics calendar.ics               Append calendar events from an .ics export.
+midden ingest ics calendar.ics --since 2015-01-01   Narrow the range to ingest.
+midden ingest git ~/src/one ~/src/two        Append commit history from local repositories.
+midden ingest git ~/src/work --author me@example.com --stat
 ```
+
+Ingest reads the whole export by default, because backfilling years of calendar history is the point
+of it. Recurring series are expanded into the occurrences they actually produced, so a weekly one-to-one
+running since 2019 contributes every week rather than a single event in 2019. `EXDATE` cancellations are
+honored and instances the calendar moved replace the occurrence they override, so a rescheduled meeting
+appears once at its real time rather than twice. Occurrences already in the vault are skipped, so running
+the same import twice changes nothing.
+
+Rules using `BYSETPOS`, `BYYEARDAY`, or `BYWEEKNO` are not expanded on those parts, and a frequency
+outside daily, weekly, monthly, and yearly is not expanded at all. Ingest counts and reports both cases
+rather than passing off a partial calendar as a complete one.
+
+`ingest git` appends one entry per commit across any number of local repositories. A calendar says where
+you were; commit history says what you were working on, and the two together reconstruct a working life
+far better than either alone. Commits are filed by author date, so rebased or cherry-picked work still
+lands on the day it was written. Merge commits are skipped unless `--merges` is given, `--author` narrows
+a shared repository to your own commits, and `--stat` adds changed-file and line counts at the cost of a
+diff per commit. Commits already in the vault are skipped by hash.
 
 </details>
 
@@ -95,8 +117,123 @@ midden tag work                              List entries with a tag.
 midden tags                                  Show the tag histogram.
 midden recall "token rotation strategy"      Semantic search over indexed entries.
 midden chat "when did I last see Mom?"       Ask an LLM a question using recalled entries as evidence.
+midden chat --since 30-days-ago "what did I do?"   Answer from every entry in a date range.
+midden chat --sweep "what do you know about my life?"   Answer from the whole vault.
+midden weave --tag calendar                  Show what recurs, when it started, and when it stopped.
+midden ask -i                                Answer a question about a gap in your own record.
 midden reindex                               Build the embedding index used by recall.
+midden reindex --full                        Re-embed everything, needed only after changing provider.
 ```
+
+Reindex reuses the vector it already has for any entry whose text has not changed, so rebuilding after
+adding a day costs one provider call rather than re-embedding the whole vault. Long rebuilds checkpoint
+as they go and each provider call has its own deadline, so an interrupted backfill resumes from where it
+stopped instead of throwing away the embeddings it already paid for.
+
+`recall` and `chat` both accept `--since` and `--until`, which take any date `midden` understands
+(`2024-03-01`, `30-days-ago`, `monday`). Scoping matters because ranking by similarity alone answers
+"what did I write about X" well and "what happened last March" badly: the closest matches to a question
+about a period are often entries from other periods. Giving `chat` a range makes it read every entry in
+that range instead of the closest few, summarizing in chunks when the range is too large to read at
+once. `--sweep` does the same across whatever is in scope, which is the whole vault by default.
+
+Every `chat` answer also carries a summary counted over every indexed entry in scope: how many entries,
+what span they cover, the tag histogram, and entries per month. Questions about the shape of the record
+are answered from those counts rather than from a handful of retrieved entries.
+
+### Scheduled entries
+
+A vault holding an imported calendar contains appointments that have not happened yet, which quietly
+breaks anything meaning "latest". `last` and `recent` therefore stop at now, and `stats` reports what is
+booked ahead separately from the span of what actually happened:
+
+```
+Span
+  First: 2022-08-18 07:00:00
+  Last:  2026-08-26 15:10:23
+  Ahead: 264 scheduled, through 2027-03-12
+```
+
+Pass `--future` to `last` or `recent` when you do want what is coming. `undo` never touches a scheduled
+entry: it removes the last thing you wrote, and nothing you wrote lives in the future.
+
+`streak` counts only days you actually wrote something. A backfilled vault has entries on thousands of
+days the person never wrote a word, and a streak counted over imported events would congratulate you for
+appointments you merely attended.
+
+### Ask
+
+Backfill has a ceiling, and it is worth being plain about where it sits. Calendars record where you were
+scheduled. Commit logs record what you shipped. Both are projections of a life rather than the life, and
+neither carries what you thought or decided, because nothing recorded that at the time. No further import
+fixes this: for anyone who was not already keeping a journal, that material does not exist to import.
+
+`midden ask` closes the gap the only way it can be closed. It reads what weave computed, finds a place
+the record proves something is missing, and asks about it:
+
+```
+William- Martial arts stopped. What happened?
+  216 times over 2.6 years, ending 2025-08-07. Nothing since, 1.0 years ago.
+```
+
+Answer it and the reply becomes an ordinary entry, with your words leading and the question trailing as
+attribution, so the record shows what you said rather than what midden asked. That question is never
+asked again. `--skip` dismisses one for good, because a queue that keeps returning a question you have
+already rejected teaches you to stop reading it.
+
+Questions are only raised about things worth explaining. A commitment that ran for months and stopped
+qualifies; a school-year reminder repeated for one term does not, and neither does anything merely
+between seasons. Questions come
+from arithmetic over the record, never from a model, so nothing is asked about something that did not
+happen. Threads still running are never asked about at all: frequency alone cannot tell a commitment that
+mattered from a chore that recurred, and a vapid prompt teaches you to ignore the next one.
+
+An answer is the first thing in a vault that no import could have produced.
+
+### Weave
+
+Search answers what you already know to ask about. `midden weave` answers what you cannot ask.
+
+A person can recall what they did but cannot perceive absence, because nothing marks the last time
+something happened. Weave groups the record into threads, measures each one's own cadence, and reports
+which have gone quiet for far longer than their rhythm allows. It also finds handoffs, where one thread
+ended and another began soon after, and crossings, the days where separate sources both recorded
+something and so can say what neither says alone.
+
+Threads are grouped by the meaningful words in a title, which survives the drift of a handwritten
+calendar without merging things that are genuinely different. A word added to a short title is a subject,
+not noise: "Doctor appt" and "Hannah doctor appt" overlap heavily but the second says whose appointment
+it was, and folding them together would treat two people's appointments as one thread and then report a
+gap spanning the distance between two unrelated lives. `--explain` lists the headlines behind every
+thread, because a claim that something ended rests entirely on what was grouped together, and that has to
+be checkable before it is believed.
+
+A thread that has gone quiet is not automatically over. Something that has already come back from a gap
+this long before is between seasons, not finished, and weave says so rather than announcing an ending
+that never happened. A spring show silent in August has simply not come round yet.
+
+Silences are found per source as well as overall, because one loud source can flood the months where
+another went quiet: commits pouring in during years the calendar recorded nothing would otherwise hide
+exactly the silence worth asking about. A silence found in the whole record is never repeated per source,
+and ask raises at most one silence per source, the longest.
+
+It also finds silences: stretches where the record itself went quiet, bounded by activity on both sides
+so the start and end of a record are never mistaken for holes. A thread ending is one commitment
+stopping. A silence is the record failing, which is both larger and completely invisible from inside it,
+since a person notices a class ending but never that years went unrecorded.
+
+Every figure is counted rather than inferred. There is no model in the detection path and nothing to
+invent. Threads are grouped by the meaningful words in a title rather than the title itself, because a
+handwritten calendar records one standing arrangement under many spellings, and grouping on the exact
+string splits it into fragments that each appear to end whenever the wording drifts.
+
+Use `--tag calendar` to weave a life source on its own. Commit history repeats boilerplate subjects
+across repositories, which crowds out real threads.
+
+`--context-chars` sets how much entry text goes to the model in one call. The default suits a model with
+a large context window. A small local model needs a much lower value, because it spends minutes on a
+prompt a hosted model reads in seconds, which makes a sweep look like a hang. Try `--context-chars 6000`
+against a 3B local model and raise it from there.
 
 </details>
 

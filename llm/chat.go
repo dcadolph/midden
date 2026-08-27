@@ -116,14 +116,26 @@ func (c *anthropicChat) Reply(ctx context.Context, system string, history []Mess
 		return "", err
 	}
 	var parsed struct {
-		StopReason string `json:"stop_reason"`
-		Content    []struct {
+		StopReason  string `json:"stop_reason"`
+		StopDetails struct {
+			Category string `json:"category"`
+		} `json:"stop_details"`
+		Content []struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`
 	}
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return "", fmt.Errorf("decode response: %w", err)
+	}
+	// A declined request is a successful HTTP response carrying no content, so
+	// reading the blocks without checking would return an empty reply as if the
+	// journal simply had nothing to say.
+	if parsed.StopReason == "refusal" {
+		if parsed.StopDetails.Category != "" {
+			return "", fmt.Errorf("anthropic declined the request (%s)", parsed.StopDetails.Category)
+		}
+		return "", errors.New("anthropic declined the request")
 	}
 	var b strings.Builder
 	for _, p := range parsed.Content {

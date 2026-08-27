@@ -2,9 +2,10 @@ package vault
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
+
+	"github.com/dcadolph/midden/internal/util"
 )
 
 // Stats is a summary of the vault contents.
@@ -22,20 +23,30 @@ type Stats struct {
 	// LastEntry is the timestamp of the latest entry, or the zero time when the vault is empty.
 	LastEntry time.Time `json:"last_entry"`
 	// TopTags is the tag histogram ordered by descending count then label.
-	TopTags []TagCount `json:"top_tags,omitempty"`
-}
-
-// TagCount pairs a tag label with the number of entries that carry it.
-type TagCount struct {
-	// Tag is the tag label without the leading hash character.
-	Tag string `json:"tag"`
-	// Count is the number of entries carrying the tag.
-	Count int `json:"count"`
+	TopTags []util.TagCount `json:"top_tags,omitempty"`
+	// Scheduled is the number of entries dated after the observation time. An
+	// imported calendar carries appointments that have not happened yet, and
+	// counting them among what the record holds overstates it.
+	Scheduled int `json:"scheduled"`
+	// LastPast is the latest entry at or before the observation time, which is
+	// what a person means by the most recent thing in the record.
+	LastPast time.Time `json:"last_past"`
+	// Authored is the number of entries the person wrote rather than imported.
+	// This is the number the whole experiment turns on: imported history proves
+	// the tool can hold a life, and only this count proves the person has
+	// started giving it the part no import can reach.
+	Authored int `json:"authored"`
+	// LastAuthored is the most recent authored entry, or the zero time when
+	// nothing has been written yet.
+	LastAuthored time.Time `json:"last_authored,omitempty"`
 }
 
 // ComputeStats walks every entry once and assembles the summary.
-// TopTags is capped at the given limit; pass a non-positive limit to include every tag.
-func (v *Vault) ComputeStats(topTagLimit int) (Stats, error) {
+// TopTags is capped at the given limit; pass a non-positive limit to include
+// every tag. Entries dated after now are counted separately as scheduled rather
+// than folded into the record's span, so an imported calendar does not make the
+// vault appear to run into next year.
+func (v *Vault) ComputeStats(topTagLimit int, now time.Time) (Stats, error) {
 	var s Stats
 	days, err := v.ListDays()
 	if err != nil {
@@ -60,19 +71,31 @@ func (v *Vault) ComputeStats(topTagLimit int) (Stats, error) {
 			if e.Time.After(s.LastEntry) {
 				s.LastEntry = e.Time
 			}
+			switch {
+			case !now.IsZero() && e.Time.After(now):
+				s.Scheduled++
+			case e.Time.After(s.LastPast):
+				s.LastPast = e.Time
+			}
+			if e.Authored() {
+				s.Authored++
+				if e.Time.After(s.LastAuthored) && (now.IsZero() || !e.Time.After(now)) {
+					s.LastAuthored = e.Time
+				}
+			}
 			for _, t := range e.Tags {
 				tagCounts[strings.ToLower(t)]++
 			}
 		}
 	}
 	s.Tags = len(tagCounts)
-	s.TopTags = sortedTagCounts(tagCounts, topTagLimit)
+	s.TopTags = util.SortedCounts(tagCounts, topTagLimit)
 	return s, nil
 }
 
 // TagCounts returns every distinct tag with its entry count, ordered by descending count then label.
 // Pass a non-positive limit to include every tag.
-func (v *Vault) TagCounts(limit int) ([]TagCount, error) {
+func (v *Vault) TagCounts(limit int) ([]util.TagCount, error) {
 	days, err := v.ListDays()
 	if err != nil {
 		return nil, err
@@ -89,12 +112,17 @@ func (v *Vault) TagCounts(limit int) ([]TagCount, error) {
 			}
 		}
 	}
-	return sortedTagCounts(tagCounts, limit), nil
+	return util.SortedCounts(tagCounts, limit), nil
 }
 
-// Streak returns the number of consecutive days ending today on which at least one entry was written.
-// A day with no entry breaks the streak, including today.
-func (v *Vault) Streak(today time.Time) (int, error) {
+// Streak returns the number of consecutive days ending today on which at least
+// one entry satisfying keep was written. A day with no such entry breaks the
+// streak, including today. A nil keep counts every entry.
+//
+// The filter exists because a backfilled vault has entries on thousands of days
+// the person never wrote a word: a streak counted over imported calendar events
+// congratulates them for appointments they merely attended.
+func (v *Vault) Streak(today time.Time, keep func(Entry) bool) (int, error) {
 	today = dayStart(today)
 	days, err := v.ListDays()
 	if err != nil {
@@ -106,8 +134,11 @@ func (v *Vault) Streak(today time.Time) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if len(entries) > 0 {
-			have[dayKey(d)] = true
+		for _, e := range entries {
+			if keep == nil || keep(e) {
+				have[dayKey(d)] = true
+				break
+			}
 		}
 	}
 	streak := 0
@@ -151,28 +182,4 @@ func countWords(s string) int {
 // dayKey formats a date as YYYY-MM-DD for use as a map key.
 func dayKey(t time.Time) string {
 	return t.Format("2006-01-02")
-}
-
-// sortedTagCounts returns the histogram as a slice ordered by descending count and ascending label.
-// A non-positive limit returns every entry.
-func sortedTagCounts(counts map[string]int, limit int) []TagCount {
-	out := make([]TagCount, 0, len(counts))
-	for t, n := range counts {
-		out = append(out, TagCount{Tag: t, Count: n})
-	}
-	sortByCountDescThenLabel(out)
-	if limit > 0 && len(out) > limit {
-		out = out[:limit]
-	}
-	return out
-}
-
-// sortByCountDescThenLabel orders the slice in place by descending count then ascending label.
-func sortByCountDescThenLabel(out []TagCount) {
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Count != out[j].Count {
-			return out[i].Count > out[j].Count
-		}
-		return out[i].Tag < out[j].Tag
-	})
 }
