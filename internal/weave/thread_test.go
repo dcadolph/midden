@@ -376,3 +376,50 @@ func TestAddsSubject(t *testing.T) {
 		})
 	}
 }
+
+func TestClassifyStretchesTheBarForIrregularThreads(t *testing.T) {
+	t.Parallel()
+	// Two threads, same median gap, same silence. The metronome has earned a
+	// verdict; the erratic one has always had long pauses, so the identical
+	// silence proves nothing about it.
+	regular := []vault.Entry{}
+	base := observed.AddDate(0, 0, -170)
+	for i := range 12 {
+		regular = append(regular, vault.Entry{Time: base.AddDate(0, 0, i*7), Body: "Metronome class"})
+	}
+	irregular := []vault.Entry{}
+	offsets := []int{0, 7, 35, 42, 49, 91, 98, 105, 112, 119, 126, 84}
+	for _, d := range offsets {
+		irregular = append(irregular, vault.Entry{Time: base.AddDate(0, 0, d), Body: "Erratic meetup"})
+	}
+	threads := Threads(append(regular, irregular...), Options{
+		Now: observed, MinCount: 5, SilenceFactor: 4, MinSilenceDays: 30, MergeSimilarity: 0.6,
+	})
+	m := find(t, threads, "Metronome class")
+	e := find(t, threads, "Erratic meetup")
+	if m.GapSpread >= e.GapSpread {
+		t.Fatalf("fixture broken: want the meetup more irregular, got %.2f vs %.2f", m.GapSpread, e.GapSpread)
+	}
+	if m.Status != Ended {
+		t.Errorf("want the silent metronome read as ended, got %s (spread %.2f, silent %d)", m.Status, m.GapSpread, m.SilentDays)
+	}
+	if e.Status == Ended {
+		t.Errorf("want the erratic thread spared the verdict, got ended (spread %.2f, silent %d)", e.GapSpread, e.SilentDays)
+	}
+}
+
+func TestGapSpread(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.Local)
+	metronome := []time.Time{base, base.AddDate(0, 0, 7), base.AddDate(0, 0, 14), base.AddDate(0, 0, 21)}
+	if got := gapSpread(metronome); got > 0.01 {
+		t.Errorf("want zero spread for a metronome, got %.3f", got)
+	}
+	erratic := []time.Time{base, base.AddDate(0, 0, 1), base.AddDate(0, 0, 60), base.AddDate(0, 0, 61)}
+	if got := gapSpread(erratic); got < 0.5 {
+		t.Errorf("want high spread for an erratic pattern, got %.3f", got)
+	}
+	if got := gapSpread(metronome[:2]); got != 0 {
+		t.Errorf("want zero for too few occurrences, got %.3f", got)
+	}
+}

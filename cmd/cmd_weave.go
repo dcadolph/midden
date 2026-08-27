@@ -84,6 +84,7 @@ func runWeave(cmd *cobra.Command, _ []string) error {
 	handoffs := weave.Handoffs(threads, weave.DefaultHandoffOptions())
 	overlaps := weave.Overlaps(entries, weaveSources, now)
 	gaps := weave.GapsBySource(entries, weaveSources, weave.DefaultGapOptions(now))
+	eras := weave.Eras(entries, weave.DefaultEraOptions(now))
 
 	if jsonOutput {
 		return jsonutil.Encode(cmd.OutOrStdout(), weaveJSON{
@@ -91,7 +92,7 @@ func runWeave(cmd *cobra.Command, _ []string) error {
 			Handoffs: handoffsToJSON(handoffs),
 		}, jsonPretty)
 	}
-	writeWeave(cmd.OutOrStdout(), threads, handoffs, overlaps, gaps, weaveLimit)
+	writeWeave(cmd.OutOrStdout(), threads, handoffs, overlaps, gaps, eras, weaveLimit)
 	return nil
 }
 
@@ -102,6 +103,7 @@ func writeWeave(
 	handoffs []weave.Handoff,
 	overlaps []weave.Overlap,
 	gaps []weave.Gap,
+	eras []weave.Era,
 	limit int,
 ) {
 	byStatus := func(s weave.Status) []weave.Thread {
@@ -112,6 +114,14 @@ func writeWeave(
 			}
 		}
 		return out
+	}
+
+	if len(eras) > 1 {
+		section(w, "Eras", "the chapters of the record, found by where its volume shifts")
+		for _, e := range eras {
+			fmt.Fprintf(w, "  %s to %s  %3d months  %6d entries  ~%.0f/month\n",
+				e.From.Format("2006-01"), e.To.Format("2006-01"), e.Months, e.Entries, e.PerMonth)
+		}
 	}
 
 	if len(gaps) > 0 {
