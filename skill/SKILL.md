@@ -8,7 +8,8 @@ description: >
   "remember X for later", "note that", "jot down", "don't forget", "midden add",
   "/journal", "what did I write about X", "when did I last", "show me recent
   entries", "what did I do on <date>", "flashback", "on this day", "how is my
-  streak", "search my journal", "list tags".
+  streak", "search my journal", "list tags", "what happened last <period>",
+  "what do you know about my life", "import my calendar", "backfill my history".
 ---
 
 Midden is a personal markdown journal on the user's machine. Daily files live at
@@ -57,7 +58,7 @@ Map the user's question to the smallest matching command:
 
 | User wants | Command |
 |---|---|
-| Last single entry | `midden last` |
+| Last single entry | `midden last` (stops at now; `--future` for scheduled entries) |
 | Last N entries | `midden last -n N` or `midden recent -n N` |
 | Everything on a date | `midden on YYYY-MM-DD` (or `today`, `yesterday`, weekday names, `N-units-ago`) |
 | Everything in a range | `midden between FROM TO` |
@@ -77,10 +78,21 @@ Map the user's question to the smallest matching command:
 | Import a markdown file as an entry | `midden import path/to/file.md --tag inbox` (or `-` to read from stdin) |
 | Render an HTML report | `midden report html -o ~/midden-report.html` |
 | Semantic search ("anything about token rotation") | `midden recall "token rotation"` (requires a prior `midden reindex`) |
-| Synthesize an answer from journal evidence | `midden chat "when did I last see Mom"` |
-| Rebuild the embedding index | `midden reindex` |
+| Synthesize an answer about a topic | `midden chat "when did I last see Mom"` |
+| Answer a question about a period | `midden chat --since 2026-03-01 --until 2026-03-31 "what happened"` |
+| Answer a question about the whole record | `midden chat --sweep "what do you know about my life"` (add `--context-chars 6000` for a small local model) |
+| What recurs, started, or stopped | `midden weave --tag calendar` (threads, handoffs, crossings) |
+| Prompt the user about a gap in their record | `midden ask` to see it, `midden ask --answer "..."` to record a reply |
+| Rebuild the embedding index | `midden reindex` (reuses unchanged vectors; `--full` re-embeds everything) |
 | Capture a voice memo (optionally transcribed) | `midden audio --duration 30s --transcribe` |
-| Ingest an .ics calendar export | `midden ingest ics ~/Downloads/cal.ics --from today --to today` |
+| Ingest an .ics calendar export | `midden ingest ics ~/Downloads/cal.ics` (whole file; narrow with `--since`/`--until`) |
+| Ingest commit history from repositories | `midden ingest git ~/src/project` (add `--author`, `--since`, `--stat`) |
+
+A vault holding an imported calendar contains appointments that have not happened
+yet. `last` and `recent` stop at the present so they do not report next spring's
+dentist appointment as the most recent thing in the record; pass `--future` when
+the user is asking what is coming up. `stats` reports scheduled entries on their
+own line for the same reason.
 
 Pass `--json` to any of the read commands to receive structured output you can
 parse without regex.
@@ -107,14 +119,104 @@ argument list is visible to other processes.
 ## LLM-backed recall and chat
 
 `midden recall "<query>"` performs a semantic search via the embedding index;
-`midden chat "<question>"` adds an LLM synthesis step that quotes journal entries
-as evidence. Both require a prior `midden reindex` and at least one provider
+`midden chat "<question>"` adds a synthesis step that quotes journal entries as
+evidence. Both require a prior `midden reindex` and at least one provider
 configured through environment variables (`VOYAGE_API_KEY`, `OPENAI_API_KEY`,
-`ANTHROPIC_API_KEY`, or local Ollama).
+`ANTHROPIC_API_KEY`, or local Ollama). Embedding and chat providers are chosen
+independently via `MIDDEN_EMBED_PROVIDER` and `MIDDEN_CHAT_PROVIDER`, so a local
+embedder can be paired with a hosted chat model.
+
+### Choose the retrieval shape before running chat
+
+This matters more than which command you pick. Ranking by similarity answers
+"what did I write about X" well and "what happened last March" badly, because the
+entries closest to a question about a period are often from other periods.
+
+- **Topic question** ("anything about the token rotation work"): plain
+  `midden chat "..."`. Similarity ranking is the right tool.
+- **Period question** ("what happened last March", "what did I do this month",
+  "how was that trip"): always pass `--since` and `--until`. Scoping switches
+  chat from reading the closest few entries to reading every entry in the range,
+  summarizing in chunks when the range is large. Without it the answer is drawn
+  from the wrong dates and will look plausible while being wrong.
+- **Whole-record question** ("what do you know about my life", "what people and
+  places seem important", "what do I keep coming back to"): pass `--sweep`.
+  Nearest-neighbor search cannot answer a question about the shape of a record.
+
+Both flags accept any date midden understands: `2026-03-01`, `30-days-ago`,
+`monday`, `today`.
+
+A sweep over a large range reads everything in it, summarizing in chunks when the
+range exceeds what the model can read at once. `--context-chars` sets that size.
+The default suits a hosted model. When the configured chat provider is a small
+local model, pass a much lower value (around `6000`) or the sweep will appear to
+hang; midden prints per-chunk progress while it works.
+
+Every chat answer also receives a summary counted over the entire indexed record
+in scope: how many entries, the span they cover, the tag histogram, and entries
+per month. Those counts are complete even when the quoted entries are a sample,
+so trust them for questions about frequency and shape, and never conclude
+something did not happen merely because it is missing from the quoted entries.
 
 Prefer `midden recall` when the user wants to find entries.
 Prefer `midden chat` when the user wants a narrated answer that cites entries.
 If recall returns nothing useful, fall back to `midden search` over the raw text.
+
+### Weave: what the user cannot ask for
+
+Use `midden weave` when the user asks what has changed, what they have stopped
+doing, what is new, or asks an open question about their own life over time.
+Recall and chat can only surface what the user already knows to ask about;
+weave reports things nobody wrote down, chiefly endings, because nothing marks
+the last time something happened.
+
+Pass `--tag calendar` (or whichever life source the vault holds) when the vault
+also contains commit history, or repeated commit subjects will crowd out the
+real threads. Read the sections as: `Silences` are stretches where the whole record
+went quiet and are the largest thing it can be missing, `Ended` is what went quiet, `Started` is
+what is new, `Ongoing` is the steady weight of the record, `Handoffs` are
+successions where one thread stopped and another began, and `Crossings` are days
+where two sources meet.
+
+Every number weave prints is counted, not inferred, so quote them exactly and do
+not embellish. Use `midden weave --explain` to show which headlines were folded
+into a thread when a grouping looks doubtful. Do check a surprising ending before presenting it as fact: run
+`midden search` on the subject to confirm the thread really stopped rather than
+being recorded under different wording.
+
+### Ask: capturing what no import can reach
+
+Imported history covers where the user was and what they produced. It never
+covers what they thought, and for anyone who did not already journal there is
+nothing to import that would. `midden ask` is how that gap closes.
+
+Run `midden ask` when the user asks what they should record, wants a prompt, or
+finishes a backfill and wonders what to do next. Put the question and its
+evidence to them verbatim; the evidence is what makes the question answerable.
+Record the reply with `midden ask --answer "<their words>"`, using their words
+rather than a summary, since the point of the entry is their voice. Use
+`midden ask --skip` when the user says a question is not worth answering, so it
+leaves the queue for good rather than being put to them again.
+
+Never invent an answer, and never file a plausible-sounding reply on the user's
+behalf. A fabricated entry is worse than a missing one: the whole value of the
+record is that everything in it is true, and a counterfeit memory is
+indistinguishable from a real one once it is written.
+
+### Backfilling history
+
+When a user wants to populate the vault from records they already have, prefer
+ingestion over asking them to write anything:
+
+- `midden ingest ics <file>` imports a calendar export. Recurring series are
+  expanded into the occurrences they actually produced, cancellations are
+  honored, and rescheduled instances replace the occurrence they override.
+  Re-running it changes nothing, so it is safe to repeat.
+- `midden ingest git <repo>...` imports commit history across any number of
+  repositories, filed by author date and deduplicated by hash. Use `--author` to
+  narrow a shared repository to the user's own commits.
+
+Run `midden reindex` after any ingest so recall and chat can see the new entries.
 
 ## Backups
 

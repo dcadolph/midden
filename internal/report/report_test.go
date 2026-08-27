@@ -10,6 +10,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
+	"github.com/dcadolph/midden/internal/util"
 	"github.com/dcadolph/midden/internal/vault"
 )
 
@@ -189,23 +190,23 @@ func TestBuildDayRows(t *testing.T) {
 func TestBuildTagBars(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		In       []vault.TagCount
+		In       []util.TagCount
 		WantBars []TagBar
 	}{{ // Test 0: The top tag gets width 100 and tiny tags get the minimum width 4.
-		In: []vault.TagCount{{Tag: "work", Count: 50}, {Tag: "home", Count: 25}, {Tag: "gym", Count: 1}},
+		In: []util.TagCount{{Tag: "work", Count: 50}, {Tag: "home", Count: 25}, {Tag: "gym", Count: 1}},
 		WantBars: []TagBar{
 			{Tag: "work", Count: 50, Width: 100},
 			{Tag: "home", Count: 25, Width: 50},
 			{Tag: "gym", Count: 1, Width: 4},
 		},
 	}, { // Test 1: A single tag spans the full width.
-		In:       []vault.TagCount{{Tag: "solo", Count: 3}},
+		In:       []util.TagCount{{Tag: "solo", Count: 3}},
 		WantBars: []TagBar{{Tag: "solo", Count: 3, Width: 100}},
 	}, { // Test 2: No tags yields no bars.
 		In:       nil,
 		WantBars: nil,
 	}, { // Test 3: A zero top count yields zero widths.
-		In:       []vault.TagCount{{Tag: "ghost", Count: 0}},
+		In:       []util.TagCount{{Tag: "ghost", Count: 0}},
 		WantBars: []TagBar{{Tag: "ghost", Count: 0, Width: 0}},
 	}}
 	for testNum, test := range tests {

@@ -38,6 +38,17 @@ func (v *Vault) ReadRange(from, to time.Time) ([]Entry, error) {
 // timestamp before selection because imports can append out of order; an
 // entry's timestamp always falls on its file's date, so day order holds.
 func (v *Vault) Recent(n int) ([]Entry, error) {
+	return v.RecentBefore(n, time.Time{})
+}
+
+// RecentBefore returns the most recent n entries at or before the cutoff,
+// newest first. A zero cutoff includes everything.
+//
+// The cutoff exists because a vault holding an imported calendar contains
+// appointments that have not happened yet. Without it "the most recent entry"
+// means the furthest one in the future, so a vault backfilled in August reports
+// next March's dentist appointment as the latest thing in the record.
+func (v *Vault) RecentBefore(n int, cutoff time.Time) ([]Entry, error) {
 	if n <= 0 {
 		return nil, fmt.Errorf("recent count must be positive")
 	}
@@ -47,12 +58,18 @@ func (v *Vault) Recent(n int) ([]Entry, error) {
 	}
 	var out []Entry
 	for i := len(days) - 1; i >= 0 && len(out) < n; i-- {
+		if !cutoff.IsZero() && days[i].After(cutoff) {
+			continue
+		}
 		entries, err := v.ReadDay(days[i])
 		if err != nil {
 			return nil, err
 		}
 		sort.SliceStable(entries, func(a, b int) bool { return entries[a].Time.Before(entries[b].Time) })
 		for j := len(entries) - 1; j >= 0 && len(out) < n; j-- {
+			if !cutoff.IsZero() && entries[j].Time.After(cutoff) {
+				continue
+			}
 			out = append(out, entries[j])
 		}
 	}

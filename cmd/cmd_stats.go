@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"time"
+
 	"errors"
 	"fmt"
 
@@ -30,7 +32,7 @@ func runStats(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	s, err := v.ComputeStats(statsTopTags)
+	s, err := v.ComputeStats(statsTopTags, time.Now())
 	if err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("compute stats: %w", err))
 	}
@@ -54,7 +56,20 @@ func runStats(cmd *cobra.Command, _ []string) error {
 	if !s.FirstEntry.IsZero() {
 		heading("Span")
 		fmt.Fprintf(w, "  First: %s\n", s.FirstEntry.Format(layoutDateTime))
-		fmt.Fprintf(w, "  Last:  %s\n", s.LastEntry.Format(layoutDateTime))
+		last := s.LastPast
+		if last.IsZero() {
+			last = s.LastEntry
+		}
+		fmt.Fprintf(w, "  Last:  %s\n", last.Format(layoutDateTime))
+		if s.Scheduled > 0 {
+			fmt.Fprintf(w, "  Ahead: %d scheduled, through %s\n", s.Scheduled, s.LastEntry.Format(layoutDate))
+		}
+	}
+	heading("Yours")
+	if s.Authored == 0 {
+		fmt.Fprintln(w, "  Written by you: 0 entries. Everything here so far was imported.")
+	} else {
+		fmt.Fprintf(w, "  Written by you: %d entries, last on %s\n", s.Authored, s.LastAuthored.Format(layoutDate))
 	}
 	if len(s.TopTags) > 0 {
 		heading("Top tags")

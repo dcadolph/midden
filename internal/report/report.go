@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dcadolph/midden/internal/util"
 	"github.com/dcadolph/midden/internal/vault"
 )
 
@@ -75,11 +76,11 @@ func Render(w io.Writer, data Data) error {
 // Build prepares Data for Render by walking the vault.
 // The heatmap covers the full year ending on the supplied reference date.
 func Build(title string, v *vault.Vault, now time.Time, topTags int) (Data, error) {
-	stats, err := v.ComputeStats(topTags)
+	stats, err := v.ComputeStats(topTags, now)
 	if err != nil {
 		return Data{}, fmt.Errorf("compute stats: %w", err)
 	}
-	streak, err := v.Streak(now)
+	streak, err := v.Streak(now, vault.Entry.Authored)
 	if err != nil {
 		return Data{}, fmt.Errorf("compute streak: %w", err)
 	}
@@ -169,7 +170,7 @@ func buildDayRows(days []time.Time, counts map[string]dayMetric) []DayRow {
 
 // buildTagBars scales tag counts to percent widths against the top tag.
 // The top tag gets width 100 and every other tag gets at least width 4.
-func buildTagBars(tags []vault.TagCount) []TagBar {
+func buildTagBars(tags []util.TagCount) []TagBar {
 	if len(tags) == 0 {
 		return nil
 	}
