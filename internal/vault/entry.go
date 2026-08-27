@@ -129,6 +129,27 @@ func (v *Vault) appendDay(entries []Entry) error {
 	return v.writeDayBytes(path, append(existing, []byte(block.String())...))
 }
 
+// ImportMarkers are the body lines that mark an entry as produced by an
+// importer rather than written by the person. They live here so every command
+// judging "did the person write this" shares one definition.
+var ImportMarkers = []string{"ICS-UID: ", "GIT-COMMIT: "}
+
+// Authored reports whether the entry was written by the person rather than
+// imported. The distinction is load-bearing: a backfilled vault holds thousands
+// of imported entries, and any feature that means to measure the person's own
+// writing must not count them.
+func (e Entry) Authored() bool {
+	for line := range strings.SplitSeq(e.Body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		for _, m := range ImportMarkers {
+			if strings.HasPrefix(trimmed, m) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // Serialize renders the entry as the markdown block written to a day file.
 // The block begins with a level-two header carrying the time and tags
 // and ends with a trailing blank line so successive entries stay separated.

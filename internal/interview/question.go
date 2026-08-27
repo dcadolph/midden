@@ -112,7 +112,15 @@ func Generate(
 	for _, c := range crossings {
 		add(crossingQuestion(c))
 	}
+	// One silence per source at most, the longest. Three questions about what is
+	// essentially one intermittent quiet stretch is over-asking, and over-asking
+	// is how a prompt earns being ignored.
+	seenSource := map[string]bool{}
 	for _, g := range gaps {
+		if seenSource[g.Source] {
+			continue
+		}
+		seenSource[g.Source] = true
 		add(gapQuestion(g))
 	}
 	// Silences are asked first regardless of weight. A gap and a thread are not
@@ -203,11 +211,15 @@ func crossingQuestion(c weave.Overlap) Question {
 // it: a person notices a class ending, never that years went unrecorded.
 func gapQuestion(g weave.Gap) Question {
 	span := fmt.Sprintf("%s to %s", g.From.Format(monthLabel), g.To.Format(monthLabel))
+	subject := "Your record"
+	if g.Source != "" {
+		subject = "Your " + g.Source
+	}
 	return Question{
-		ID:   id(KindGap, span),
+		ID:   id(KindGap, g.Source+"|"+span),
 		Kind: KindGap,
-		Prompt: fmt.Sprintf("Your record goes quiet for %s, from %s. What was happening then?",
-			approxMonths(g.Months*30), span),
+		Prompt: fmt.Sprintf("%s goes quiet for %s, from %s. What was happening then?",
+			subject, approxMonths(g.Months*30), span),
 		Context: fmt.Sprintf("%d entries across %d months, against about %.0f a month before and %.0f after.",
 			g.Entries, g.Months, g.Before, g.After),
 		When:   g.From,

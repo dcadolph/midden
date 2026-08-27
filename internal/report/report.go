@@ -80,7 +80,7 @@ func Build(title string, v *vault.Vault, now time.Time, topTags int) (Data, erro
 	if err != nil {
 		return Data{}, fmt.Errorf("compute stats: %w", err)
 	}
-	streak, err := v.Streak(now)
+	streak, err := v.Streak(now, vault.Entry.Authored)
 	if err != nil {
 		return Data{}, fmt.Errorf("compute streak: %w", err)
 	}

@@ -154,7 +154,12 @@ Span
   Ahead: 264 scheduled, through 2027-03-12
 ```
 
-Pass `--future` to `last` or `recent` when you do want what is coming.
+Pass `--future` to `last` or `recent` when you do want what is coming. `undo` never touches a scheduled
+entry: it removes the last thing you wrote, and nothing you wrote lives in the future.
+
+`streak` counts only days you actually wrote something. A backfilled vault has entries on thousands of
+days the person never wrote a word, and a streak counted over imported events would congratulate you for
+appointments you merely attended.
 
 ### Ask
 
@@ -206,6 +211,11 @@ be checkable before it is believed.
 A thread that has gone quiet is not automatically over. Something that has already come back from a gap
 this long before is between seasons, not finished, and weave says so rather than announcing an ending
 that never happened. A spring show silent in August has simply not come round yet.
+
+Silences are found per source as well as overall, because one loud source can flood the months where
+another went quiet: commits pouring in during years the calendar recorded nothing would otherwise hide
+exactly the silence worth asking about. A silence found in the whole record is never repeated per source,
+and ask raises at most one silence per source, the longest.
 
 It also finds silences: stretches where the record itself went quiet, bounded by activity on both sides
 so the start and end of a record are never mistaken for holes. A thread ending is one commitment

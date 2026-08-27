@@ -152,7 +152,7 @@ func pendingQuestions(entries []vault.Entry) []interview.Question {
 	if len(crossings) > 3 {
 		crossings = crossings[:3]
 	}
-	gaps := weave.Gaps(source, weave.DefaultGapOptions(now))
+	gaps := weave.GapsBySource(source, []string{"calendar", "git"}, weave.DefaultGapOptions(now))
 	return interview.Generate(threads, crossings, gaps, answered, interview.DefaultOptions(now))
 }
 

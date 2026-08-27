@@ -130,3 +130,65 @@ func TestGapsOrderLongestFirst(t *testing.T) {
 		t.Errorf("want the longer silence first, got %d then %d", got[0].Months, got[1].Months)
 	}
 }
+
+func TestGapsBySourceFindsASilenceOneSourceMasks(t *testing.T) {
+	t.Parallel()
+	var entries []vault.Entry
+	// The calendar goes quiet for two years while commits flood the same months.
+	for _, e := range span(2022, time.January, 12, 8) {
+		e.Tags = []string{"calendar"}
+		entries = append(entries, e)
+	}
+	for _, e := range span(2025, time.January, 12, 8) {
+		e.Tags = []string{"calendar"}
+		entries = append(entries, e)
+	}
+	for _, e := range span(2022, time.January, 48, 30) {
+		e.Tags = []string{"git"}
+		entries = append(entries, e)
+	}
+	now := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.Local)
+	// The whole record never goes quiet, which is exactly how one loud source
+	// hides the silence in another.
+	if got := Gaps(entries, DefaultGapOptions(now)); len(got) != 0 {
+		t.Fatalf("precondition: want no whole-record silence, got %+v", got)
+	}
+	got := GapsBySource(entries, []string{"calendar", "git"}, DefaultGapOptions(now))
+	if len(got) != 1 {
+		t.Fatalf("want the masked calendar silence found, got %d: %+v", len(got), got)
+	}
+	if got[0].Source != "calendar" {
+		t.Errorf("want the silence attributed to the calendar, got %q", got[0].Source)
+	}
+	if got[0].Months < 20 {
+		t.Errorf("want roughly two years of silence, got %d months", got[0].Months)
+	}
+}
+
+func TestGapsBySourceDoesNotRepeatAWholeRecordSilence(t *testing.T) {
+	t.Parallel()
+	var entries []vault.Entry
+	// Every source is quiet over the same stretch, so the whole-record gap
+	// already covers it and per-source copies would ask the same question twice.
+	for _, e := range span(2020, time.January, 12, 10) {
+		e.Tags = []string{"calendar"}
+		entries = append(entries, e)
+	}
+	for _, e := range span(2023, time.January, 12, 10) {
+		e.Tags = []string{"calendar"}
+		entries = append(entries, e)
+	}
+	now := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.Local)
+	got := GapsBySource(entries, []string{"calendar"}, DefaultGapOptions(now))
+	whole, perSource := 0, 0
+	for _, g := range got {
+		if g.Source == "" {
+			whole++
+		} else {
+			perSource++
+		}
+	}
+	if whole != 1 || perSource != 0 {
+		t.Errorf("want one whole-record silence and no per-source copy, got %d and %d", whole, perSource)
+	}
+}

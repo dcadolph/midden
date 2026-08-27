@@ -83,7 +83,7 @@ func runWeave(cmd *cobra.Command, _ []string) error {
 	threads := weave.Threads(threadInput, opts)
 	handoffs := weave.Handoffs(threads, weave.DefaultHandoffOptions())
 	overlaps := weave.Overlaps(entries, weaveSources, now)
-	gaps := weave.Gaps(threadInput, weave.DefaultGapOptions(now))
+	gaps := weave.GapsBySource(entries, weaveSources, weave.DefaultGapOptions(now))
 
 	if jsonOutput {
 		return jsonutil.Encode(cmd.OutOrStdout(), weaveJSON{
@@ -117,8 +117,12 @@ func writeWeave(
 	if len(gaps) > 0 {
 		section(w, "Silences", "stretches where the record itself went quiet")
 		for _, g := range head(gaps, limit) {
-			fmt.Fprintf(w, "  %s to %s  %d months, %d entries (about %.0f/month before, %.0f after)\n",
-				g.From.Format("2006-01"), g.To.Format("2006-01"), g.Months, g.Entries, g.Before, g.After)
+			scope := "whole record"
+			if g.Source != "" {
+				scope = g.Source + " only"
+			}
+			fmt.Fprintf(w, "  %s to %s  %d months, %d entries  [%s]  (about %.0f/month before, %.0f after)\n",
+				g.From.Format("2006-01"), g.To.Format("2006-01"), g.Months, g.Entries, scope, g.Before, g.After)
 		}
 	}
 

@@ -13,6 +13,12 @@ import (
 // invisible from the inside: a person notices that a class ended, but never
 // that a whole span of years went unrecorded.
 type Gap struct {
+	// Source is the source tag whose record fell silent, or empty when the
+	// silence spans the whole record. The distinction matters because one loud
+	// source can flood the months where another went quiet: commits pouring in
+	// during years the calendar recorded nothing would otherwise hide exactly
+	// the silence worth asking about.
+	Source string
 	// From is the first day of the first quiet month.
 	From time.Time
 	// To is the last day of the last quiet month.
@@ -42,6 +48,42 @@ type GapOptions struct {
 // DefaultGapOptions returns silence settings suited to a personal record.
 func DefaultGapOptions(now time.Time) GapOptions {
 	return GapOptions{Now: now, MinMonths: 6, QuietFraction: 0.15}
+}
+
+// GapsBySource finds interior silences in the whole record and inside each
+// source separately, longest first. A silence found in the whole record is not
+// repeated per source.
+func GapsBySource(entries []vault.Entry, sources []string, opts GapOptions) []Gap {
+	out := Gaps(entries, opts)
+	covered := func(g Gap) bool {
+		for _, w := range out {
+			if w.Source == "" && !g.From.Before(w.From) && !g.To.After(w.To) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, src := range sources {
+		var subset []vault.Entry
+		for _, e := range entries {
+			if sourceOf(e, []string{src}) != "" {
+				subset = append(subset, e)
+			}
+		}
+		for _, g := range Gaps(subset, opts) {
+			g.Source = src
+			if !covered(g) {
+				out = append(out, g)
+			}
+		}
+	}
+	sort.Slice(out, func(a, b int) bool {
+		if out[a].Months != out[b].Months {
+			return out[a].Months > out[b].Months
+		}
+		return out[a].From.Before(out[b].From)
+	})
+	return out
 }
 
 // Gaps finds the interior silences in a record, longest first.
