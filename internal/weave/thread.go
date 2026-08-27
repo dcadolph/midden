@@ -56,6 +56,11 @@ type Thread struct {
 	SpanDays int
 	// Status is where the thread stands.
 	Status Status
+	// Variants are the distinct headlines that were folded into this thread.
+	// A record whose whole worth is being true has to be auditable: a reader
+	// must be able to see what was grouped together before believing a claim
+	// built on the grouping.
+	Variants []string
 }
 
 // Weight ranks how much of a life a thread represents, combining how often it
@@ -116,6 +121,7 @@ func Threads(entries []vault.Entry, opts Options) []Thread {
 	}
 	grouped := map[string][]time.Time{}
 	labels := map[string]string{}
+	variants := map[string]map[string]bool{}
 	for _, e := range entries {
 		if !opts.Now.IsZero() && e.Time.After(opts.Now) {
 			continue
@@ -128,14 +134,20 @@ func Threads(entries []vault.Entry, opts Options) []Thread {
 		if _, ok := labels[key]; !ok {
 			labels[key] = headline(e.Body)
 		}
+		if variants[key] == nil {
+			variants[key] = map[string]bool{}
+		}
+		variants[key][headline(e.Body)] = true
 	}
-	grouped, labels = mergeSimilar(grouped, labels, opts.MergeSimilarity)
+	grouped, labels, variants = mergeSimilar(grouped, labels, variants, opts.MergeSimilarity)
 	out := make([]Thread, 0, len(grouped))
 	for key, times := range grouped {
 		if len(times) < opts.MinCount {
 			continue
 		}
-		out = append(out, buildThread(key, labels[key], times, opts))
+		t := buildThread(key, labels[key], times, opts)
+		t.Variants = sortedSet(variants[key])
+		out = append(out, t)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Weight() != out[j].Weight() {
@@ -309,10 +321,11 @@ func headline(body string) string {
 func mergeSimilar(
 	grouped map[string][]time.Time,
 	labels map[string]string,
+	variants map[string]map[string]bool,
 	threshold float64,
-) (map[string][]time.Time, map[string]string) {
+) (map[string][]time.Time, map[string]string, map[string]map[string]bool) {
 	if threshold <= 0 || threshold > 1 {
-		return grouped, labels
+		return grouped, labels, variants
 	}
 	keys := make([]string, 0, len(grouped))
 	for k := range grouped {
@@ -331,11 +344,12 @@ func mergeSimilar(
 	}
 	outTimes := map[string][]time.Time{}
 	outLabels := map[string]string{}
+	outVariants := map[string]map[string]bool{}
 	canonical := make([]int, 0, len(keys))
 	for i, k := range keys {
 		target := -1
 		for _, c := range canonical {
-			if jaccard(sets[i], sets[c]) >= threshold {
+			if jaccard(sets[i], sets[c]) >= threshold && !addsSubject(sets[i], sets[c]) {
 				target = c
 				break
 			}
@@ -344,13 +358,70 @@ func mergeSimilar(
 			canonical = append(canonical, i)
 			outTimes[k] = append(outTimes[k], grouped[k]...)
 			outLabels[k] = labels[k]
+			outVariants[k] = copySet(variants[k])
 			continue
 		}
 		ck := keys[target]
 		outTimes[ck] = append(outTimes[ck], grouped[k]...)
+		if outVariants[ck] == nil {
+			outVariants[ck] = map[string]bool{}
+		}
+		for v := range variants[k] {
+			outVariants[ck][v] = true
+		}
 	}
-	return outTimes, outLabels
+	return outTimes, outLabels, outVariants
 }
+
+// copySet duplicates a set so later merges cannot mutate the original.
+func copySet(in map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(in))
+	for k := range in {
+		out[k] = true
+	}
+	return out
+}
+
+// sortedSet renders a set as a stable ordered slice.
+func sortedSet(in map[string]bool) []string {
+	out := make([]string, 0, len(in))
+	for k := range in {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// addsSubject reports whether merging two word sets would absorb a title that
+// names nobody into one that names someone.
+//
+// "Doctor appt" and "Hannah doctor appt" overlap heavily, but the second says
+// whose appointment it was and the first does not. Folding them together treats
+// two people's appointments as one thread, which then reports a gap spanning the
+// distance between two unrelated lives. A short title has no room for a spare
+// word, so a word added to one is a subject rather than noise; a longer title
+// can absorb one without changing what it is about.
+func addsSubject(a, b map[string]bool) bool {
+	shorter, longer := a, b
+	if len(b) < len(a) {
+		shorter, longer = b, a
+	}
+	if len(shorter) >= minTokensForNoise {
+		return false
+	}
+	for w := range shorter {
+		if !longer[w] {
+			// Not a subset: the two differ in both directions, so neither is a
+			// bare version of the other.
+			return false
+		}
+	}
+	return len(longer) > len(shorter)
+}
+
+// minTokensForNoise is how many words a title needs before an extra one can be
+// treated as incidental rather than as the subject.
+const minTokensForNoise = 3
 
 // wordSet splits a normalized key back into its words.
 func wordSet(key string) map[string]bool {

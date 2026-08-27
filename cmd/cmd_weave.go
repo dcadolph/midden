@@ -22,6 +22,7 @@ var (
 	weaveLimit   int
 	weaveSources []string
 	weaveTags    []string
+	weaveExplain bool
 )
 
 // weaveCmd surfaces the shape of the record over time.
@@ -41,6 +42,8 @@ func init() {
 	weaveCmd.Flags().StringVar(&weaveUntil, "until", "", "Only consider entries on or before this date.")
 	weaveCmd.Flags().IntVar(&weaveMin, "min", 5, "Fewest occurrences a pattern needs to count as a thread.")
 	weaveCmd.Flags().IntVar(&weaveLimit, "top", 12, "Maximum threads to show per section.")
+	weaveCmd.Flags().BoolVar(&weaveExplain, "explain", false,
+		"Show the distinct headlines folded into each thread, so a grouping can be checked before it is believed.")
 	weaveCmd.Flags().StringSliceVar(&weaveTags, "tag", nil,
 		"Only weave entries carrying one of these tags. Commit history repeats boilerplate subjects across repositories, so restricting to a life source such as calendar keeps those out of the threads.")
 	weaveCmd.Flags().StringSliceVar(&weaveSources, "source", []string{"calendar", "git"},
@@ -136,6 +139,7 @@ func writeWeave(
 			fmt.Fprintf(w, "  %-44s %4dx, last %s, quiet %s (longest gap before: %s)\n",
 				truncate(t.Label, 44), t.Count, t.Last.Format(layoutDate),
 				months(t.SilentDays), months(t.MaxGap))
+			writeVariants(w, t)
 		}
 	}
 
@@ -152,6 +156,7 @@ func writeWeave(
 	section(w, "Ongoing", "the steady weight of the record")
 	for _, t := range head(ongoing, limit) {
 		fmt.Fprintf(w, "  %-44s %4dx every ~%d days\n", truncate(t.Label, 44), t.Count, t.MedianGap)
+		writeVariants(w, t)
 	}
 	if len(ongoing) == 0 {
 		fmt.Fprintln(w, "  nothing recurring")
@@ -180,6 +185,18 @@ func writeWeave(
 				}
 			}
 		}
+	}
+}
+
+// writeVariants lists the headlines folded into a thread when explaining. A
+// claim that something ended rests entirely on what was grouped together, so
+// the grouping has to be inspectable.
+func writeVariants(w io.Writer, t weave.Thread) {
+	if !weaveExplain || len(t.Variants) < 2 {
+		return
+	}
+	for _, v := range t.Variants {
+		fmt.Fprintf(w, "        · %s\n", truncate(v, 68))
 	}
 }
 

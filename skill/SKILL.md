@@ -179,7 +179,8 @@ successions where one thread stopped and another began, and `Crossings` are days
 where two sources meet.
 
 Every number weave prints is counted, not inferred, so quote them exactly and do
-not embellish. Do check a surprising ending before presenting it as fact: run
+not embellish. Use `midden weave --explain` to show which headlines were folded
+into a thread when a grouping looks doubtful. Do check a surprising ending before presenting it as fact: run
 `midden search` on the subject to confirm the thread really stopped rather than
 being recorded under different wording.
 
