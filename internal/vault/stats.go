@@ -31,6 +31,14 @@ type Stats struct {
 	// LastPast is the latest entry at or before the observation time, which is
 	// what a person means by the most recent thing in the record.
 	LastPast time.Time `json:"last_past"`
+	// Authored is the number of entries the person wrote rather than imported.
+	// This is the number the whole experiment turns on: imported history proves
+	// the tool can hold a life, and only this count proves the person has
+	// started giving it the part no import can reach.
+	Authored int `json:"authored"`
+	// LastAuthored is the most recent authored entry, or the zero time when
+	// nothing has been written yet.
+	LastAuthored time.Time `json:"last_authored,omitempty"`
 }
 
 // ComputeStats walks every entry once and assembles the summary.
@@ -68,6 +76,12 @@ func (v *Vault) ComputeStats(topTagLimit int, now time.Time) (Stats, error) {
 				s.Scheduled++
 			case e.Time.After(s.LastPast):
 				s.LastPast = e.Time
+			}
+			if e.Authored() {
+				s.Authored++
+				if e.Time.After(s.LastAuthored) && (now.IsZero() || !e.Time.After(now)) {
+					s.LastAuthored = e.Time
+				}
 			}
 			for _, t := range e.Tags {
 				tagCounts[strings.ToLower(t)]++
