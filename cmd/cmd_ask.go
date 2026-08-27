@@ -147,7 +147,9 @@ func pendingQuestions(entries []vault.Entry) []interview.Question {
 			source = append(source, e)
 		}
 	}
-	threads := weave.Threads(source, weave.DefaultOptions(now))
+	threadOpts := weave.DefaultOptions(now)
+	threadOpts.SameKeys, _ = loadEquivalences(source)
+	threads := weave.Threads(source, threadOpts)
 	crossings := weave.Overlaps(source, []string{"calendar", "git"}, now)
 	if len(crossings) > 3 {
 		crossings = crossings[:3]

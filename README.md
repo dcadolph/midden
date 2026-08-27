@@ -121,6 +121,7 @@ midden chat --since 30-days-ago "what did I do?"   Answer from every entry in a 
 midden chat --sweep "what do you know about my life?"   Answer from the whole vault.
 midden weave --tag calendar                  Show what recurs, when it started, and when it stopped.
 midden people                                List the people your record mentions, and who has faded.
+midden classify --apply                      Judge whether two names are one thing; you decide.
 midden ask -i                                Answer a question about a gap in your own record.
 midden reindex                               Build the embedding index used by recall.
 midden reindex --full                        Re-embed everything, needed only after changing provider.
@@ -141,6 +142,21 @@ once. `--sweep` does the same across whatever is in scope, which is the whole va
 Every `chat` answer also carries a summary counted over every indexed entry in scope: how many entries,
 what span they cover, the tag histogram, and entries per month. Questions about the shape of the record
 are answered from those counts rather than from a handful of retrieved entries.
+
+### Classify
+
+The arithmetic refuses two kinds of merge on principle: a title that names nobody never joins one that
+names someone, and Will and William are two strings. `midden classify` is where those calls get made,
+under strict rules. Arithmetic generates the candidate pairs; a model answers only yes or no about each
+pair under a fixed schema, and an unparseable answer counts as no answer rather than a guess. Every
+verdict is a proposal shown with its evidence, and nothing changes until you accept it in `--apply`.
+
+An accepted merge is recorded as an ordinary entry carrying a `MIDDEN-SAME:` marker, which weave and
+people then read; a rejection is recorded the same way so a pair is never proposed twice. The model never
+writes to the vault, verdict entries never count as your writing or as mentions of anyone, and the tool
+works fully without a model configured. The judged calls are exactly as good as the model making them,
+which is why the human accept is the only thing that changes state: a wrong model costs you a wrong
+proposal, never a wrong record.
 
 ### Scheduled entries
 

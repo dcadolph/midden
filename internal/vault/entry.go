@@ -130,9 +130,35 @@ func (v *Vault) appendDay(entries []Entry) error {
 }
 
 // ImportMarkers are the body lines that mark an entry as produced by an
-// importer rather than written by the person. They live here so every command
-// judging "did the person write this" shares one definition.
-var ImportMarkers = []string{"ICS-UID: ", "GIT-COMMIT: "}
+// importer or by tool bookkeeping rather than written by the person. They live
+// here so every command judging "did the person write this" shares one
+// definition. Identity verdicts belong here even though a person approved
+// them: approving a merge is operating the tool, not writing about a life, and
+// the authored count must never move except by writing.
+var ImportMarkers = []string{"ICS-UID: ", "GIT-COMMIT: ", SameMarker, DiffMarker}
+
+// Identity markers record an accepted or rejected merge verdict. They are
+// bookkeeping: configuration the person approved, not a record of their life.
+const (
+	// SameMarker records that two keys are one thing.
+	SameMarker = "MIDDEN-SAME: "
+	// DiffMarker records that two keys are not.
+	DiffMarker = "MIDDEN-DIFF: "
+)
+
+// Bookkeeping reports whether the entry is tool bookkeeping rather than a
+// record of anything that happened. Bookkeeping steers the analysis, so the
+// analysis must never read it as data: an entry saying two names are the same
+// person would otherwise count as a fresh mention of both.
+func (e Entry) Bookkeeping() bool {
+	for line := range strings.SplitSeq(e.Body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, SameMarker) || strings.HasPrefix(trimmed, DiffMarker) {
+			return true
+		}
+	}
+	return false
+}
 
 // Authored reports whether the entry was written by the person rather than
 // imported. The distinction is load-bearing: a backfilled vault holds thousands

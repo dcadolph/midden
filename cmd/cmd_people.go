@@ -63,6 +63,7 @@ func runPeople(cmd *cobra.Command, _ []string) error {
 	opts := weave.DefaultPeopleOptions(time.Now())
 	opts.MinMentions = peopleMin
 	opts.Exclude = peopleExclude
+	_, opts.SameNames = loadEquivalences(entries)
 	people := weave.People(entries, opts)
 	if len(people) == 0 {
 		return errors.Join(ErrNotFound, errors.New("no recurring names found"))
