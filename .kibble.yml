@@ -1,0 +1,33 @@
+# Settings kibble uses when it replays this README in a clean container.
+# The ingest examples read a calendar the reader exports from their own
+# provider, so the session supplies a small valid one and the documented
+# lines run for real instead of being reported as a hole in the docs.
+version: 1
+examples:
+  fixtures:
+    - path: calendar.ics
+      contents: |
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//kibble//midden example//EN
+        CALSCALE:GREGORIAN
+        BEGIN:VEVENT
+        UID:kibble-example-1@midden.local
+        DTSTAMP:20260102T090000Z
+        DTSTART:20260102T090000Z
+        DTEND:20260102T093000Z
+        SUMMARY:Standup
+        END:VEVENT
+        BEGIN:VEVENT
+        UID:kibble-example-2@midden.local
+        DTSTAMP:20260115T160000Z
+        DTSTART:20260115T160000Z
+        DTEND:20260115T170000Z
+        SUMMARY:Design review
+        END:VEVENT
+        END:VCALENDAR
+  steps:
+    # midden's -i means interactive, which kibble cannot infer from the flag
+    # alone since -i means in-place to most other tools.
+    - match: "midden ask -i"
+      skip: "opens an interactive prompt the session cannot answer"
