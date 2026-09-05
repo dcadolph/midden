@@ -14,6 +14,7 @@ package mobile
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -30,14 +31,43 @@ const layoutTimestamp = "2006-01-02T15:04:05"
 
 // Vault is a handle to a journal directory usable from Swift.
 type Vault struct {
+	// v is the canonical journal the desktop owns.
 	v *vault.Vault
+	// inbox is this device's own append target, nil when the handle writes
+	// straight to the canonical day files.
+	inbox *vault.Vault
 }
 
-// Open returns a Vault rooted at dir.
+// Open returns a Vault that appends straight to the canonical day files.
 // passphrase may be empty for an unencrypted vault; for an encrypted vault it
 // is verified before the handle is returned so a wrong passphrase fails here
 // rather than on first read.
 func Open(dir, passphrase string) (*Vault, error) {
+	v, err := openCanonical(dir, passphrase)
+	if err != nil {
+		return nil, err
+	}
+	return &Vault{v: v}, nil
+}
+
+// OpenDevice returns a Vault that appends to this device's inbox rather than to
+// the canonical day files, which is what a synced device must do so two devices
+// never write the same file on the same day. Reads still cover both, so the
+// device sees its own unsynced entries alongside everything else.
+func OpenDevice(dir, passphrase, device string) (*Vault, error) {
+	v, err := openCanonical(dir, passphrase)
+	if err != nil {
+		return nil, err
+	}
+	box, err := v.Inbox(device)
+	if err != nil {
+		return nil, fmt.Errorf("open inbox: %w", err)
+	}
+	return &Vault{v: v, inbox: box}, nil
+}
+
+// openCanonical opens the journal root and unlocks it when it is encrypted.
+func openCanonical(dir, passphrase string) (*vault.Vault, error) {
 	v, err := vault.Open(dir)
 	if err != nil {
 		return nil, fmt.Errorf("open vault: %w", err)
@@ -50,7 +80,15 @@ func Open(dir, passphrase string) (*Vault, error) {
 			return nil, fmt.Errorf("verify passphrase: %w", err)
 		}
 	}
-	return &Vault{v: v}, nil
+	return v, nil
+}
+
+// writeTarget returns the vault new entries are appended to.
+func (m *Vault) writeTarget() *vault.Vault {
+	if m.inbox != nil {
+		return m.inbox
+	}
+	return m.v
 }
 
 // Dir returns the absolute vault directory path.
@@ -79,7 +117,7 @@ func (m *Vault) AppendAt(timestamp, tags, body string) error {
 		return fmt.Errorf("entry body is empty")
 	}
 	entry := vault.Entry{Time: when, Tags: util.NormalizeTags(strings.Split(tags, ",")), Body: body}
-	if err := m.v.Append(entry); err != nil {
+	if err := m.writeTarget().Append(entry); err != nil {
 		return fmt.Errorf("append entry: %w", err)
 	}
 	return nil
@@ -91,11 +129,11 @@ func (m *Vault) DayJSON(date string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	entries, err := m.v.ReadDay(day)
+	entries, err := m.merged(func(v *vault.Vault) ([]vault.Entry, error) { return v.ReadDay(day) })
 	if err != nil {
 		return "", fmt.Errorf("read day %s: %w", date, err)
 	}
-	return entriesJSON(entries)
+	return entriesJSON(sortByTime(entries))
 }
 
 // RangeJSON returns the entries between two dates inclusive as a JSON array.
@@ -108,38 +146,78 @@ func (m *Vault) RangeJSON(from, to string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	entries, err := m.v.ReadRange(start, end)
+	entries, err := m.merged(func(v *vault.Vault) ([]vault.Entry, error) { return v.ReadRange(start, end) })
 	if err != nil {
 		return "", fmt.Errorf("read range %s to %s: %w", from, to, err)
 	}
-	return entriesJSON(entries)
+	return entriesJSON(sortByTime(entries))
 }
 
-// RecentJSON returns the n most recent entries as a JSON array.
+// RecentJSON returns the n most recent entries as a JSON array, newest first.
 func (m *Vault) RecentJSON(n int) (string, error) {
-	entries, err := m.v.Recent(n)
+	entries, err := m.merged(func(v *vault.Vault) ([]vault.Entry, error) { return v.Recent(n) })
 	if err != nil {
 		return "", fmt.Errorf("read recent: %w", err)
+	}
+	// Each source returned its own newest n; keep the newest n of the union.
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Time.After(entries[j].Time) })
+	if n >= 0 && len(entries) > n {
+		entries = entries[:n]
 	}
 	return entriesJSON(entries)
 }
 
 // SearchJSON returns the entries whose text matches query as a JSON array.
 func (m *Vault) SearchJSON(query string) (string, error) {
-	entries, err := m.v.Search(query)
+	entries, err := m.merged(func(v *vault.Vault) ([]vault.Entry, error) { return v.Search(query) })
 	if err != nil {
 		return "", fmt.Errorf("search: %w", err)
 	}
-	return entriesJSON(entries)
+	return entriesJSON(sortByTime(entries))
 }
 
-// Streak returns the number of consecutive days ending today with at least one entry.
-func (m *Vault) Streak() (int, error) {
-	n, err := m.v.Streak(time.Now(), func(vault.Entry) bool { return true })
+// merged runs read against the canonical vault and this device's inbox and
+// returns the combined entries, so unsynced local captures are never missing
+// from what the device displays.
+func (m *Vault) merged(read func(*vault.Vault) ([]vault.Entry, error)) ([]vault.Entry, error) {
+	entries, err := read(m.v)
 	if err != nil {
-		return 0, fmt.Errorf("streak: %w", err)
+		return nil, err
 	}
-	return n, nil
+	if m.inbox == nil {
+		return entries, nil
+	}
+	pending, err := read(m.inbox)
+	if err != nil {
+		return nil, err
+	}
+	return append(entries, pending...), nil
+}
+
+// sortByTime orders entries ascending by timestamp, keeping arrival order
+// within a timestamp so entries written in the same second stay stable.
+func sortByTime(entries []vault.Entry) []vault.Entry {
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Time.Before(entries[j].Time) })
+	return entries
+}
+
+// Streak returns the number of consecutive days ending today with at least one
+// entry, counting this device's unsynced captures so a day journaled only on
+// the phone still holds the streak.
+func (m *Vault) Streak() (int, error) {
+	count := 0
+	// A day file can exist while holding no entries, so the day has to be read
+	// rather than merely listed, matching how the vault counts a streak.
+	for day := time.Now(); ; day = day.AddDate(0, 0, -1) {
+		entries, err := m.merged(func(v *vault.Vault) ([]vault.Entry, error) { return v.ReadDay(day) })
+		if err != nil {
+			return 0, fmt.Errorf("streak: %w", err)
+		}
+		if len(entries) == 0 {
+			return count, nil
+		}
+		count++
+	}
 }
 
 // jsonEntry is the wire shape of one journal entry.

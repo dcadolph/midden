@@ -33,7 +33,7 @@ struct LogEntryIntent: AppIntent {
         let dir = VaultStore.vaultDirectory
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var err: NSError?
-        guard let vault = MobileOpen(dir.path, "", &err) else {
+        guard let vault = MobileOpenDevice(dir.path, "", DeviceID.current, &err) else {
             throw AppIntentError.vaultUnavailable(err?.localizedDescription ?? "unknown error")
         }
         try vault.append(at: Entry.timestampFormatter.string(from: Date()), tags: tags, body: body)

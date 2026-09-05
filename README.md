@@ -57,6 +57,8 @@ midden edit 2026-06-16                       Edit a specific day file.
 midden undo                                  Remove the most recent entry written.
 midden import path/to/note.md --tag inbox    Append a file as one entry on today.
 midden import - --date 2026-06-10            Read stdin and file it on a chosen date.
+midden inbox list                            Show entries captured on other devices, waiting to merge.
+midden inbox fold                            Merge every device inbox into the day files.
 midden voice                                 Speak an entry; the transcript is appended to today.
 midden voice --tag garden --keep-audio       Tag the spoken entry and keep the WAV linked in the vault.
 midden audio                                 Record a voice memo and append it to today.
@@ -401,6 +403,8 @@ cd ios && xcodegen generate && open Midden.xcodeproj
 ```
 
 The framework and the Xcode project are build products and are not tracked. Entry timestamps cross the boundary as local wall clock without a zone offset, matching what a day file records; the app supplies the timestamp because a bound framework cannot trust `time.Local` on iOS.
+
+The phone does not write the canonical day files. It appends to `inbox/<device>/`, which carries the same layout and encryption, so two devices journaling on the same day never write the same file and a merge cannot conflict. The phone's reads cover the canonical files and its own inbox together, so an entry it has not yet handed over is still visible there. On the desktop, `midden inbox fold` merges those entries into the day files and empties the inbox; a fold that is interrupted leaves the inbox intact so a rerun finishes the job rather than losing entries.
 
 Set `DEVELOPMENT_TEAM` in `project.yml` to your own team before building for a device, and sign in to that Apple ID in Xcode so automatic signing can issue a profile. Running on your own phone needs nothing further; TestFlight additionally needs an App Store Connect record for the bundle identifier.
 

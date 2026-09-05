@@ -138,3 +138,95 @@ func TestRangeRecentSearchStreak(t *testing.T) {
 		t.Errorf("Streak: %v", err)
 	}
 }
+
+func TestOpenDeviceKeepsDevicesOffTheSameFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	desktop, err := Open(dir, "")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	phone, err := OpenDevice(dir, "", "iphone")
+	if err != nil {
+		t.Fatalf("OpenDevice: %v", err)
+	}
+	if err := desktop.AppendAt("2026-09-05T08:00:00", "desk", "Written on the desktop."); err != nil {
+		t.Fatalf("desktop append: %v", err)
+	}
+	if err := phone.AppendAt("2026-09-05T09:00:00", "phone", "Captured on the phone."); err != nil {
+		t.Fatalf("phone append: %v", err)
+	}
+
+	// The phone sees both its own pending capture and the canonical entry.
+	got := decodeEntries(t, mustDay(t, phone, "2026-09-05"))
+	if len(got) != 2 || got[0].Body != "Written on the desktop." || got[1].Body != "Captured on the phone." {
+		t.Errorf("phone day = %+v, want both entries in time order", got)
+	}
+
+	// The desktop does not see the phone's entry until it is folded in.
+	deskGot := decodeEntries(t, mustDay(t, desktop, "2026-09-05"))
+	if len(deskGot) != 1 || deskGot[0].Body != "Written on the desktop." {
+		t.Errorf("desktop day = %+v, want only the desktop entry", deskGot)
+	}
+}
+
+func TestDeviceReadsMergeAcrossSurfaces(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	desktop, err := Open(dir, "")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	phone, err := OpenDevice(dir, "", "iphone")
+	if err != nil {
+		t.Fatalf("OpenDevice: %v", err)
+	}
+	if err := desktop.AppendAt("2026-09-04T08:00:00", "", "Older desktop entry."); err != nil {
+		t.Fatalf("desktop append: %v", err)
+	}
+	if err := phone.AppendAt("2026-09-05T09:00:00", "", "Newer phone entry."); err != nil {
+		t.Fatalf("phone append: %v", err)
+	}
+
+	inRange := decodeEntries(t, mustRange(t, phone, "2026-09-04", "2026-09-05"))
+	if len(inRange) != 2 {
+		t.Errorf("range returned %d entries, want 2", len(inRange))
+	}
+
+	recent, err := phone.RecentJSON(1)
+	if err != nil {
+		t.Fatalf("RecentJSON: %v", err)
+	}
+	newest := decodeEntries(t, recent)
+	if len(newest) != 1 || newest[0].Body != "Newer phone entry." {
+		t.Errorf("recent = %+v, want the phone entry as newest", newest)
+	}
+
+	found, err := phone.SearchJSON("phone entry")
+	if err != nil {
+		t.Fatalf("SearchJSON: %v", err)
+	}
+	if got := len(decodeEntries(t, found)); got != 1 {
+		t.Errorf("search returned %d entries, want 1", got)
+	}
+}
+
+// mustDay returns the day JSON or fails the test.
+func mustDay(t *testing.T, v *Vault, date string) string {
+	t.Helper()
+	data, err := v.DayJSON(date)
+	if err != nil {
+		t.Fatalf("DayJSON(%s): %v", date, err)
+	}
+	return data
+}
+
+// mustRange returns the range JSON or fails the test.
+func mustRange(t *testing.T, v *Vault, from, to string) string {
+	t.Helper()
+	data, err := v.RangeJSON(from, to)
+	if err != nil {
+		t.Fatalf("RangeJSON(%s,%s): %v", from, to, err)
+	}
+	return data
+}
