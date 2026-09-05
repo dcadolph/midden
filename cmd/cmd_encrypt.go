@@ -117,7 +117,7 @@ func runEncryptEnable(cmd *cobra.Command, _ []string) error {
 			return errors.Join(ErrVault, err)
 		}
 	}
-	files, err := dayFilePaths(v)
+	files, err := sealablePaths(v)
 	if err != nil {
 		return errors.Join(ErrVault, err)
 	}
@@ -171,7 +171,7 @@ func runEncryptDisable(cmd *cobra.Command, _ []string) error {
 	}
 	defer func() { _ = lock.Close() }()
 	encrypted := v.WithPassphrase(pass)
-	files, err := dayFilePaths(v)
+	files, err := sealablePaths(v)
 	if err != nil {
 		return errors.Join(ErrVault, err)
 	}
@@ -215,7 +215,7 @@ func runEncryptVerify(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	encrypted := v.WithPassphrase(pass)
-	files, err := dayFilePaths(v)
+	files, err := sealablePaths(v)
 	if err != nil {
 		return errors.Join(ErrVault, err)
 	}
@@ -293,6 +293,24 @@ func latestStoredDate(v *vault.Vault) time.Time {
 		return time.Time{}
 	}
 	return days[len(days)-1]
+}
+
+// sealablePaths returns every vault file whose encryption state must track the
+// vault marker: the day files, plus the recall index when one has been built.
+//
+// The index stores entry bodies verbatim so recall can quote them back, so
+// leaving it in plaintext beside an encrypted vault would publish the journal
+// it is meant to protect.
+func sealablePaths(v *vault.Vault) ([]string, error) {
+	paths, err := dayFilePaths(v)
+	if err != nil {
+		return nil, err
+	}
+	idx := indexPath(v)
+	if _, err := os.Stat(idx); err == nil {
+		paths = append(paths, idx)
+	}
+	return paths, nil
 }
 
 // dayFilePaths returns the absolute paths of every YYYY/MM/DD.md file under the vault.
