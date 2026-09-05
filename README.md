@@ -386,6 +386,23 @@ Encrypted vaults read-decrypt-append-encrypt the relevant day file inside an adv
 </details>
 
 <details>
+<summary><b>iPhone app</b></summary>
+
+`ios/` holds a SwiftUI app that captures entries by voice or keyboard, lists today and the trailing week, and exposes a "Journal" App Intent so Siri, Shortcuts, and the Action button can append without opening the app. Dictation uses on-device speech recognition, so spoken entries never leave the phone.
+
+The app does not reimplement the journal. `mobile/` wraps the vault, encryption, and date handling for `gomobile bind`, and the app links the resulting framework, so both the app and the command line read and write one format.
+
+```
+go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init
+ios/build-core.sh          # builds ios/Frameworks/MiddenCore.xcframework
+cd ios && xcodegen generate && open Midden.xcodeproj
+```
+
+The framework and the Xcode project are build products and are not tracked. Entry timestamps cross the boundary as local wall clock without a zone offset, matching what a day file records; the app supplies the timestamp because a bound framework cannot trust `time.Local` on iOS.
+
+</details>
+
+<details>
 <summary><b>Vault layout</b></summary>
 
 ```
