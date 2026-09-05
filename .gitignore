@@ -23,3 +23,8 @@ profile.*
 *.age
 *.pem
 *.key
+
+# iOS build products
+ios/Frameworks/
+ios/Midden.xcodeproj/
+ios/build/
