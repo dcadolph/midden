@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/dcadolph/midden/internal/config"
+	"github.com/dcadolph/midden/internal/util"
 )
 
 // loadedConfig caches the parsed config so multiple subcommands share one read.
@@ -47,7 +48,7 @@ func resolveDefaultTags() []string {
 // mergeTags returns the normalized union of defaults and flags, dropping
 // case-insensitive duplicates while preserving first-seen order and case.
 func mergeTags(defaults, flags []string) []string {
-	merged := normalizeTags(append(append([]string(nil), defaults...), flags...))
+	merged := util.NormalizeTags(append(append([]string(nil), defaults...), flags...))
 	var out []string
 	for _, t := range merged {
 		if !slices.ContainsFunc(out, func(kept string) bool { return strings.EqualFold(kept, t) }) {

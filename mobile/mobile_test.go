@@ -1,0 +1,153 @@
+package mobile
+
+import (
+	"encoding/json"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+)
+
+// openTestVault returns a Vault rooted in a fresh temp directory.
+func openTestVault(t *testing.T) *Vault {
+	t.Helper()
+	v, err := Open(t.TempDir(), "")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	return v
+}
+
+// decodeEntries parses the wire JSON array produced by the Vault methods.
+func decodeEntries(t *testing.T, data string) []jsonEntry {
+	t.Helper()
+	var entries []jsonEntry
+	if err := json.Unmarshal([]byte(data), &entries); err != nil {
+		t.Fatalf("unmarshal %q: %v", data, err)
+	}
+	return entries
+}
+
+func TestAppendAtRoundTrip(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		Timestamp   string
+		Tags        string
+		Body        string
+		WantDate    string
+		WantEntries []jsonEntry
+		Want        error
+	}{{ // Test 0: A plain entry round-trips through DayJSON.
+		Timestamp: "2026-09-01T08:15:00-05:00",
+		Body:      "Walked the trail before work.",
+		WantDate:  "2026-09-01",
+		WantEntries: []jsonEntry{{
+			Time: "2026-09-01T08:15:00-05:00", Body: "Walked the trail before work.",
+		}},
+	}, { // Test 1: Comma-separated tags are normalized.
+		Timestamp: "2026-09-02T19:00:00-05:00",
+		Tags:      " #voice , garden ,, ",
+		Body:      "Planted the fall garlic.",
+		WantDate:  "2026-09-02",
+		WantEntries: []jsonEntry{{
+			Time: "2026-09-02T19:00:00-05:00", Tags: []string{"voice", "garden"}, Body: "Planted the fall garlic.",
+		}},
+	}, { // Test 2: A bad timestamp is rejected.
+		Timestamp: "yesterday-ish", Body: "x", Want: errBadInput,
+	}, { // Test 3: An empty body is rejected.
+		Timestamp: "2026-09-03T10:00:00-05:00", Body: "  ", Want: errBadInput,
+	}}
+	for testNum, test := range tests {
+		t.Run(fmt.Sprintf("test %d", testNum), func(t *testing.T) {
+			t.Parallel()
+			v := openTestVault(t)
+			err := v.AppendAt(test.Timestamp, test.Tags, test.Body)
+			if (err != nil) != (test.Want != nil) {
+				t.Fatalf("AppendAt error = %v, want error %t", err, test.Want != nil)
+			}
+			if test.Want != nil {
+				return
+			}
+			day, err := v.DayJSON(test.WantDate)
+			if err != nil {
+				t.Fatalf("DayJSON: %v", err)
+			}
+			got := decodeEntries(t, day)
+			normalizeZones(got)
+			if diff := cmp.Diff(test.WantEntries, got, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// errBadInput marks table rows that expect a rejected append.
+var errBadInput = fmt.Errorf("bad input")
+
+// normalizeZones rewrites entry timestamps into the fixed offset used by the
+// test fixtures so the comparison is stable across host time zones.
+func normalizeZones(entries []jsonEntry) {
+	zone := time.FixedZone("CDT", -5*3600)
+	for i, e := range entries {
+		when, err := time.Parse(time.RFC3339, e.Time)
+		if err != nil {
+			continue
+		}
+		entries[i].Time = when.In(zone).Format(time.RFC3339)
+	}
+}
+
+func TestRangeRecentSearchStreak(t *testing.T) {
+	t.Parallel()
+	v := openTestVault(t)
+	seed := []struct {
+		Timestamp string
+		Tags      string
+		Body      string
+	}{
+		{"2026-09-01T08:00:00-05:00", "run", "Morning run."},
+		{"2026-09-02T09:00:00-05:00", "", "Fixed the gate latch."},
+		{"2026-09-03T10:00:00-05:00", "garden", "Planted garlic."},
+	}
+	for _, s := range seed {
+		if err := v.AppendAt(s.Timestamp, s.Tags, s.Body); err != nil {
+			t.Fatalf("AppendAt(%s): %v", s.Timestamp, err)
+		}
+	}
+
+	rangeJSON, err := v.RangeJSON("2026-09-01", "2026-09-02")
+	if err != nil {
+		t.Fatalf("RangeJSON: %v", err)
+	}
+	if got := len(decodeEntries(t, rangeJSON)); got != 2 {
+		t.Errorf("RangeJSON returned %d entries, want 2", got)
+	}
+
+	if _, err := v.RangeJSON("nope", "2026-09-02"); err == nil {
+		t.Error("RangeJSON accepted a bad from date")
+	}
+
+	recentJSON, err := v.RecentJSON(2)
+	if err != nil {
+		t.Fatalf("RecentJSON: %v", err)
+	}
+	recent := decodeEntries(t, recentJSON)
+	if len(recent) != 2 || recent[0].Body != "Planted garlic." {
+		t.Errorf("RecentJSON = %+v, want the two newest entries starting with the garlic entry", recent)
+	}
+
+	searchJSON, err := v.SearchJSON("gate latch")
+	if err != nil {
+		t.Fatalf("SearchJSON: %v", err)
+	}
+	if got := len(decodeEntries(t, searchJSON)); got != 1 {
+		t.Errorf("SearchJSON returned %d entries, want 1", got)
+	}
+
+	// Streak counts from today; the seeded past days do not reach it.
+	if _, err := v.Streak(); err != nil {
+		t.Errorf("Streak: %v", err)
+	}
+}
