@@ -32,6 +32,10 @@ func TestErrorCode(t *testing.T) {
 		In: fmt.Errorf("sync: %w", ErrGit), WantCode: ExitGit, WantOK: true,
 	}, { // Test 9: ErrVault wins when joined with ErrNotFound.
 		In: errors.Join(ErrVault, ErrNotFound), WantCode: ExitVault, WantOK: true,
+	}, { // Test 10: ErrTranscribe maps to the transcribe exit code.
+		In: ErrTranscribe, WantCode: ExitTranscribe, WantOK: true,
+	}, { // Test 11: Joined ErrTranscribe keeps its sentinel mapping.
+		In: errors.Join(ErrTranscribe, errors.New("no speech detected")), WantCode: ExitTranscribe, WantOK: true,
 	}}
 	for testNum, test := range tests {
 		t.Run(fmt.Sprintf("test %d", testNum), func(t *testing.T) {

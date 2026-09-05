@@ -57,8 +57,10 @@ midden edit 2026-06-16                       Edit a specific day file.
 midden undo                                  Remove the most recent entry written.
 midden import path/to/note.md --tag inbox    Append a file as one entry on today.
 midden import - --date 2026-06-10            Read stdin and file it on a chosen date.
+midden voice                                 Speak an entry; the transcript is appended to today.
+midden voice --tag garden --keep-audio       Tag the spoken entry and keep the WAV linked in the vault.
 midden audio                                 Record a voice memo and append it to today.
-midden audio --duration 30s --transcribe     Record for 30s then transcribe with OpenAI Whisper.
+midden audio --duration 30s --transcribe     Record for 30s then transcribe the memo.
 midden ingest ics calendar.ics               Append calendar events from an .ics export.
 midden ingest ics calendar.ics --since 2015-01-01   Narrow the range to ingest.
 midden ingest git ~/src/one ~/src/two        Append commit history from local repositories.
@@ -305,19 +307,19 @@ midden version                               Print the build version.
 <details>
 <summary><b>LLM and audio</b></summary>
 
-Recall, chat, reindex, and Whisper transcription call external models. Each provider is selected from environment variables; midden never sends anything until you opt in by setting one.
+Recall, chat, and reindex call external models. Each provider is selected from environment variables; midden never sends anything until you opt in by setting one. Transcription is the exception: it runs locally through whisper.cpp by default and only reaches the network when the openai backend is selected.
 
 | Action | Variables (first match wins) |
 |---|---|
 | Embeddings | `VOYAGE_API_KEY` → `OPENAI_API_KEY` → local Ollama at `OLLAMA_HOST`. Force with `MIDDEN_EMBED_PROVIDER`. |
 | Chat | `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → local Ollama. Force with `MIDDEN_CHAT_PROVIDER`. |
-| Transcription | `OPENAI_API_KEY` (Whisper). |
+| Transcription | Local whisper.cpp (`brew install whisper-cpp`). Config `whisper_backend: openai` or `midden voice --cloud` uses the Whisper API with `OPENAI_API_KEY` instead. |
 
 Model overrides: `OPENAI_EMBED_MODEL`, `VOYAGE_EMBED_MODEL`, `OLLAMA_EMBED_MODEL`, `ANTHROPIC_MODEL`, `OPENAI_CHAT_MODEL`, `OLLAMA_CHAT_MODEL`.
 
 Run `midden reindex` after major writes to keep the embedding index fresh. The index file lives at `<vault>/.midden.index.json`.
 
-Audio capture uses the first available recorder in this order: `sox`, `rec`, `ffmpeg` (avfoundation on macOS, alsa on Linux, dshow on Windows). Recorded WAVs land in `<vault>/audio/YYYY/MM/DD/HH-MM-SS.wav` and the day file gains a linking entry.
+Audio capture uses the first available recorder in this order: `sox`, `rec`, `ffmpeg` (avfoundation on macOS, alsa on Linux, dshow on Windows). `midden audio` keeps the WAV at `<vault>/audio/YYYY/MM/DD/HH-MM-SS.wav` and the day file gains a linking entry. `midden voice` is the journaling shortcut: it records, transcribes locally, appends the transcript as a plain entry, and discards the audio unless `--keep-audio` is set. The local model downloads to the midden data directory on first use (`base.en` by default, overridable with `whisper_model`).
 
 </details>
 
@@ -332,12 +334,16 @@ default_tags:
 editor: nvim
 keychain: true
 vault: /Users/you/midden
+whisper_backend: local
+whisper_model: base.en
 ```
 
 - `default_tags` are unused yet; future `midden add` will seed every entry with them.
 - `editor` takes precedence over the editor env vars.
 - `keychain: true` enables OS keychain lookup before the interactive passphrase prompt.
 - `vault` overrides the default vault directory (the `--vault` flag and `$MIDDEN_HOME` still beat it).
+- `whisper_backend` selects the transcription backend: `local` (default) or `openai`.
+- `whisper_model` names the local Whisper model (`base.en`, `small.en`, ...) or points at a ggml `.bin` file.
 
 Global flags:
 

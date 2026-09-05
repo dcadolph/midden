@@ -1,19 +1,12 @@
 package cmd
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"mime/multipart"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -40,7 +33,7 @@ var audioCmd = &cobra.Command{
 
 func init() {
 	audioCmd.Flags().DurationVar(&audioDuration, "duration", 0, "Cap the recording length (0 = record until Ctrl-C).")
-	audioCmd.Flags().BoolVar(&audioTranscribe, "transcribe", false, "Run OpenAI Whisper transcription after recording (needs $OPENAI_API_KEY).")
+	audioCmd.Flags().BoolVar(&audioTranscribe, "transcribe", false, "Transcribe after recording (local whisper.cpp by default; whisper_backend config selects openai).")
 	audioCmd.Flags().StringSliceVarP(&audioTags, "tag", "t", nil, "Tags to attach to the entry (the audio tag is always added).")
 	rootCmd.AddCommand(audioCmd)
 }
@@ -52,13 +45,24 @@ func runAudio(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	var transcribe transcribeFunc
+	if audioTranscribe {
+		// Resolve before the microphone opens so a first-use model download
+		// happens up front, and degrade to a plain memo on failure.
+		t, err := resolveTranscriber(false, cmd.ErrOrStderr())
+		if err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "transcription skipped: %v\n", err)
+		} else {
+			transcribe = t
+		}
+	}
 	when := time.Now()
 	dir := filepath.Join(v.Dir, "audio", when.Format("2006"), when.Format("01"), when.Format("02"))
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return errors.Join(ErrVault, fmt.Errorf("create audio directory: %w", err))
 	}
 	path := filepath.Join(dir, when.Format("15-04-05")+".wav")
-	if err := recordAudio(cmd, path); err != nil {
+	if err := recordAudio(cmd, path, recordOptions{Duration: audioDuration}); err != nil {
 		return err
 	}
 	info, err := os.Stat(path)
@@ -69,12 +73,12 @@ func runAudio(cmd *cobra.Command, _ []string) error {
 		return errors.Join(ErrVault, fmt.Errorf("recording produced empty file %s", path))
 	}
 	body := fmt.Sprintf("Voice memo at `%s`.", path)
-	if audioTranscribe {
-		text, err := transcribeWhisper(path)
+	if transcribe != nil {
+		text, err := transcribe(path)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "transcription skipped: %v\n", err)
-		} else {
-			body = strings.TrimSpace(text) + "\n\nAudio: `" + path + "`"
+		} else if cleaned := trimTranscript(text); cleaned != "" {
+			body = cleaned + "\n\nAudio: `" + path + "`"
 		}
 	}
 	if err := v.Append(vault.Entry{Time: when, Tags: entryTags(append(audioTags, "audio")), Body: body}); err != nil {
@@ -84,14 +88,22 @@ func runAudio(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// recordOptions control how recordAudio captures the WAV.
+type recordOptions struct {
+	// Duration caps the recording length; zero records until Ctrl-C.
+	Duration time.Duration
+	// Mono16k records 16 kHz mono, the native Whisper input format.
+	Mono16k bool
+}
+
 // recordAudio shells out to the first available recording tool and writes a WAV to path.
-func recordAudio(cmd *cobra.Command, path string) error {
-	binary, args := pickRecorder(path)
+func recordAudio(cmd *cobra.Command, path string, opts recordOptions) error {
+	binary, args := pickRecorder(path, opts.Mono16k)
 	if binary == "" {
 		return errors.Join(ErrVault, errors.New("no recorder found: install sox, rec, or ffmpeg"))
 	}
-	if audioDuration > 0 {
-		args = appendDurationArg(binary, args, audioDuration)
+	if opts.Duration > 0 {
+		args = appendDurationArg(binary, args, opts.Duration)
 	}
 	fmt.Fprintf(cmd.ErrOrStderr(), "Recording with %s. Press Ctrl-C to stop.\n", binary)
 	c := exec.Command(binary, args...) //nolint:gosec // Recorder binary resolved via exec.LookPath.
@@ -112,18 +124,44 @@ func recordAudio(cmd *cobra.Command, path string) error {
 
 // pickRecorder returns the first available recorder binary along with its required args.
 // Returned empty binary means none was found.
-func pickRecorder(out string) (string, []string) {
+func pickRecorder(out string, mono16k bool) (string, []string) {
 	if p, err := exec.LookPath("sox"); err == nil {
-		return p, []string{"-d", out}
+		return p, recorderArgs("sox", out, mono16k)
 	}
 	if p, err := exec.LookPath("rec"); err == nil {
-		return p, []string{out}
+		return p, recorderArgs("rec", out, mono16k)
 	}
 	if p, err := exec.LookPath("ffmpeg"); err == nil {
-		input := ffmpegInputArgs()
-		return p, append(append([]string{}, input...), "-y", out)
+		return p, recorderArgs("ffmpeg", out, mono16k)
 	}
 	return "", nil
+}
+
+// recorderArgs builds the capture arguments for a recorder binary name.
+// With mono16k, sox and rec downsample through effects after the output file
+// and ffmpeg through output options before it.
+func recorderArgs(name, out string, mono16k bool) []string {
+	switch name {
+	case "sox":
+		args := []string{"-d", out}
+		if mono16k {
+			args = append(args, "rate", "16000", "channels", "1")
+		}
+		return args
+	case "rec":
+		args := []string{out}
+		if mono16k {
+			args = append(args, "rate", "16000", "channels", "1")
+		}
+		return args
+	case "ffmpeg":
+		args := append([]string{}, ffmpegInputArgs()...)
+		if mono16k {
+			args = append(args, "-ar", "16000", "-ac", "1")
+		}
+		return append(args, "-y", out)
+	}
+	return nil
 }
 
 // ffmpegInputArgs returns the per-OS ffmpeg input arguments for default microphone capture.
@@ -149,59 +187,4 @@ func appendDurationArg(binary string, args []string, d time.Duration) []string {
 		return append([]string{"-t", fmt.Sprintf("%d", secs)}, args...)
 	}
 	return args
-}
-
-// transcribeWhisper sends the WAV file to OpenAI Whisper and returns the transcribed text.
-func transcribeWhisper(path string) (string, error) {
-	key := os.Getenv("OPENAI_API_KEY")
-	if key == "" {
-		return "", errors.New("OPENAI_API_KEY is not set")
-	}
-	f, err := os.Open(path) //nolint:gosec // Recording path built from the vault directory.
-	if err != nil {
-		return "", fmt.Errorf("open audio: %w", err)
-	}
-	defer func() { _ = f.Close() }()
-	var body bytes.Buffer
-	w := multipart.NewWriter(&body)
-	if err := w.WriteField("model", "whisper-1"); err != nil {
-		return "", fmt.Errorf("write field: %w", err)
-	}
-	fw, err := w.CreateFormFile("file", filepath.Base(path))
-	if err != nil {
-		return "", fmt.Errorf("create form file: %w", err)
-	}
-	if _, err := io.Copy(fw, f); err != nil {
-		return "", fmt.Errorf("copy audio: %w", err)
-	}
-	if err := w.Close(); err != nil {
-		return "", fmt.Errorf("close form: %w", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/audio/transcriptions", &body)
-	if err != nil {
-		return "", fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Content-Type", w.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+key)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("do request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("whisper: %s: %s", resp.Status, string(data))
-	}
-	var parsed struct {
-		Text string `json:"text"`
-	}
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
-	}
-	return parsed.Text, nil
 }

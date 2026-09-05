@@ -14,6 +14,8 @@ var (
 	ErrLLM = errors.New("llm provider failed")
 	// ErrGit wraps git repository operation failures.
 	ErrGit = errors.New("git operation failed")
+	// ErrTranscribe wraps speech transcription failures.
+	ErrTranscribe = errors.New("transcription failed")
 )
 
 // errorCode maps a known error to its process exit code.
@@ -29,6 +31,8 @@ func errorCode(err error) (int, bool) {
 		return ExitLLM, true
 	case errors.Is(err, ErrGit):
 		return ExitGit, true
+	case errors.Is(err, ErrTranscribe):
+		return ExitTranscribe, true
 	}
 	return 0, false
 }
