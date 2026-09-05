@@ -32,6 +32,13 @@ type Config struct {
 	Keychain bool `yaml:"keychain,omitempty"`
 	// Vault overrides the vault directory.
 	Vault string `yaml:"vault,omitempty"`
+	// WhisperBackend selects the transcription backend: "local" (whisper.cpp, the
+	// default) or "openai" (the Whisper API, needs $OPENAI_API_KEY).
+	WhisperBackend string `yaml:"whisper_backend,omitempty"`
+	// WhisperModel is the local Whisper model: a name like "base.en" or "small.en"
+	// resolved in the midden data directory and downloaded on first use, or a path
+	// to a ggml model file. Empty means "base.en".
+	WhisperModel string `yaml:"whisper_model,omitempty"`
 }
 
 // Load returns the parsed Config from disk.

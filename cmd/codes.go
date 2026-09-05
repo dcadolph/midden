@@ -18,4 +18,6 @@ const (
 	ExitLLM = 6
 	// ExitGit indicates a git repository operation failure.
 	ExitGit = 7
+	// ExitTranscribe indicates a speech transcription failure.
+	ExitTranscribe = 8
 )
