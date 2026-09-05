@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -40,24 +39,26 @@ func TestAppendAtRoundTrip(t *testing.T) {
 		WantEntries []jsonEntry
 		Want        error
 	}{{ // Test 0: A plain entry round-trips through DayJSON.
-		Timestamp: "2026-09-01T08:15:00-05:00",
+		Timestamp: "2026-09-01T08:15:00",
 		Body:      "Walked the trail before work.",
 		WantDate:  "2026-09-01",
 		WantEntries: []jsonEntry{{
-			Time: "2026-09-01T08:15:00-05:00", Body: "Walked the trail before work.",
+			Time: "2026-09-01T08:15:00", Body: "Walked the trail before work.",
 		}},
 	}, { // Test 1: Comma-separated tags are normalized.
-		Timestamp: "2026-09-02T19:00:00-05:00",
+		Timestamp: "2026-09-02T19:00:00",
 		Tags:      " #voice , garden ,, ",
 		Body:      "Planted the fall garlic.",
 		WantDate:  "2026-09-02",
 		WantEntries: []jsonEntry{{
-			Time: "2026-09-02T19:00:00-05:00", Tags: []string{"voice", "garden"}, Body: "Planted the fall garlic.",
+			Time: "2026-09-02T19:00:00", Tags: []string{"voice", "garden"}, Body: "Planted the fall garlic.",
 		}},
 	}, { // Test 2: A bad timestamp is rejected.
 		Timestamp: "yesterday-ish", Body: "x", Want: errBadInput,
-	}, { // Test 3: An empty body is rejected.
-		Timestamp: "2026-09-03T10:00:00-05:00", Body: "  ", Want: errBadInput,
+	}, { // Test 3: A timestamp carrying a zone offset is rejected.
+		Timestamp: "2026-09-03T10:00:00-05:00", Body: "x", Want: errBadInput,
+	}, { // Test 4: An empty body is rejected.
+		Timestamp: "2026-09-03T10:00:00", Body: "  ", Want: errBadInput,
 	}}
 	for testNum, test := range tests {
 		t.Run(fmt.Sprintf("test %d", testNum), func(t *testing.T) {
@@ -75,7 +76,6 @@ func TestAppendAtRoundTrip(t *testing.T) {
 				t.Fatalf("DayJSON: %v", err)
 			}
 			got := decodeEntries(t, day)
-			normalizeZones(got)
 			if diff := cmp.Diff(test.WantEntries, got, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
@@ -86,19 +86,6 @@ func TestAppendAtRoundTrip(t *testing.T) {
 // errBadInput marks table rows that expect a rejected append.
 var errBadInput = fmt.Errorf("bad input")
 
-// normalizeZones rewrites entry timestamps into the fixed offset used by the
-// test fixtures so the comparison is stable across host time zones.
-func normalizeZones(entries []jsonEntry) {
-	zone := time.FixedZone("CDT", -5*3600)
-	for i, e := range entries {
-		when, err := time.Parse(time.RFC3339, e.Time)
-		if err != nil {
-			continue
-		}
-		entries[i].Time = when.In(zone).Format(time.RFC3339)
-	}
-}
-
 func TestRangeRecentSearchStreak(t *testing.T) {
 	t.Parallel()
 	v := openTestVault(t)
@@ -107,9 +94,9 @@ func TestRangeRecentSearchStreak(t *testing.T) {
 		Tags      string
 		Body      string
 	}{
-		{"2026-09-01T08:00:00-05:00", "run", "Morning run."},
-		{"2026-09-02T09:00:00-05:00", "", "Fixed the gate latch."},
-		{"2026-09-03T10:00:00-05:00", "garden", "Planted garlic."},
+		{"2026-09-01T08:00:00", "run", "Morning run."},
+		{"2026-09-02T09:00:00", "", "Fixed the gate latch."},
+		{"2026-09-03T10:00:00", "garden", "Planted garlic."},
 	}
 	for _, s := range seed {
 		if err := v.AppendAt(s.Timestamp, s.Tags, s.Body); err != nil {
