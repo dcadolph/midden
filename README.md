@@ -319,6 +319,8 @@ Model overrides: `OPENAI_EMBED_MODEL`, `VOYAGE_EMBED_MODEL`, `OLLAMA_EMBED_MODEL
 
 Run `midden reindex` after major writes to keep the embedding index fresh. The index file lives at `<vault>/.midden.index.json`.
 
+The index stores entry bodies verbatim so recall can quote them back, so it is encrypted with the vault rather than beside it. `encrypt enable`, `disable`, and `verify` all cover it along with the day files.
+
 Audio capture uses the first available recorder in this order: `sox`, `rec`, `ffmpeg` (avfoundation on macOS, alsa on Linux, dshow on Windows). `midden audio` keeps the WAV at `<vault>/audio/YYYY/MM/DD/HH-MM-SS.wav` and the day file gains a linking entry. `midden voice` is the journaling shortcut: it records, transcribes locally, appends the transcript as a plain entry, and discards the audio unless `--keep-audio` is set. The local model downloads to the midden data directory on first use (`base.en` by default, overridable with `whisper_model`).
 
 </details>
