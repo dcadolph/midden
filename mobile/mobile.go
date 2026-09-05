@@ -2,8 +2,13 @@
 //
 // The API is deliberately flat because gomobile restricts the types that
 // cross the language boundary: strings and ints in, JSON strings out. Dates
-// cross as "2006-01-02" and timestamps as RFC 3339. Entry lists are JSON
-// arrays of {time, tags, body} objects.
+// cross as "2006-01-02" and timestamps as "2006-01-02T15:04:05". Entry lists
+// are JSON arrays of {time, tags, body} objects.
+//
+// Timestamps carry no zone offset because day files record local wall clock
+// time and nothing else. A bound framework cannot rely on time.Local either,
+// since the host process reports UTC on iOS, so the caller supplies the wall
+// clock it wants recorded and reads it back unchanged.
 package mobile
 
 import (
@@ -18,6 +23,10 @@ import (
 
 // layoutDate is the wire format for calendar dates.
 const layoutDate = "2006-01-02"
+
+// layoutTimestamp is the wire format for entry timestamps: local wall clock
+// with no zone offset, matching what a day file records.
+const layoutTimestamp = "2006-01-02T15:04:05"
 
 // Vault is a handle to a journal directory usable from Swift.
 type Vault struct {
@@ -54,25 +63,22 @@ func (m *Vault) IsEncrypted() bool {
 	return m.v.IsEncrypted()
 }
 
-// Append writes a new entry timestamped now.
-// tags is comma-separated and may be empty.
-func (m *Vault) Append(tags, body string) error {
-	return m.AppendAt(time.Now().Format(time.RFC3339), tags, body)
-}
-
-// AppendAt writes a new entry with an explicit RFC 3339 timestamp.
-// Capture flows that record offline and append later use this to keep the
-// spoken time rather than the sync time.
+// AppendAt writes a new entry stamped with the given local wall clock time,
+// formatted as "2006-01-02T15:04:05".
+//
+// The caller supplies the timestamp rather than the core reading a clock, both
+// so the host's time zone is authoritative and so a capture recorded offline
+// keeps the time it was spoken rather than the time it was synced.
 func (m *Vault) AppendAt(timestamp, tags, body string) error {
-	when, err := time.ParseInLocation(time.RFC3339, timestamp, time.Local)
+	when, err := time.ParseInLocation(layoutTimestamp, timestamp, time.Local)
 	if err != nil {
-		return fmt.Errorf("parse timestamp %q: %w", timestamp, err)
+		return fmt.Errorf("parse timestamp %q: want %s: %w", timestamp, layoutTimestamp, err)
 	}
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return fmt.Errorf("entry body is empty")
 	}
-	entry := vault.Entry{Time: when.In(time.Local), Tags: util.NormalizeTags(strings.Split(tags, ",")), Body: body}
+	entry := vault.Entry{Time: when, Tags: util.NormalizeTags(strings.Split(tags, ",")), Body: body}
 	if err := m.v.Append(entry); err != nil {
 		return fmt.Errorf("append entry: %w", err)
 	}
@@ -138,7 +144,7 @@ func (m *Vault) Streak() (int, error) {
 
 // jsonEntry is the wire shape of one journal entry.
 type jsonEntry struct {
-	// Time is the entry timestamp in RFC 3339.
+	// Time is the entry timestamp as local wall clock without a zone offset.
 	Time string `json:"time"`
 	// Tags are the entry tags without leading hash characters.
 	Tags []string `json:"tags,omitempty"`
@@ -150,7 +156,7 @@ type jsonEntry struct {
 func entriesJSON(entries []vault.Entry) (string, error) {
 	out := make([]jsonEntry, 0, len(entries))
 	for _, e := range entries {
-		out = append(out, jsonEntry{Time: e.Time.Format(time.RFC3339), Tags: e.Tags, Body: e.Body})
+		out = append(out, jsonEntry{Time: e.Time.Format(layoutTimestamp), Tags: e.Tags, Body: e.Body})
 	}
 	data, err := json.Marshal(out)
 	if err != nil {
