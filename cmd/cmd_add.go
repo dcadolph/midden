@@ -114,20 +114,3 @@ func chooseEditor() string {
 	}
 	return "vi"
 }
-
-// normalizeTags trims whitespace and drops empty entries and leading hash characters.
-// Tags retain their original case; comparisons use case-insensitive helpers.
-func normalizeTags(in []string) []string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(in))
-	for _, t := range in {
-		t = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(t), "#"))
-		if t == "" {
-			continue
-		}
-		out = append(out, t)
-	}
-	return out
-}
