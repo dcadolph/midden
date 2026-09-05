@@ -28,3 +28,6 @@ profile.*
 ios/Frameworks/
 ios/Midden.xcodeproj/
 ios/build/
+
+# Device build output
+ios/build-device/
