@@ -400,6 +400,8 @@ cd ios && xcodegen generate && open Midden.xcodeproj
 
 The framework and the Xcode project are build products and are not tracked. Entry timestamps cross the boundary as local wall clock without a zone offset, matching what a day file records; the app supplies the timestamp because a bound framework cannot trust `time.Local` on iOS.
 
+Set `DEVELOPMENT_TEAM` in `project.yml` to your own team before building for a device, and sign in to that Apple ID in Xcode so automatic signing can issue a profile. Running on your own phone needs nothing further; TestFlight additionally needs an App Store Connect record for the bundle identifier.
+
 </details>
 
 <details>
