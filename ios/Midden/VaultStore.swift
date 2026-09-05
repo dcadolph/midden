@@ -46,7 +46,7 @@ final class VaultStore: ObservableObject {
             return
         }
         var err: NSError?
-        guard let handle = MobileOpen(dir.path, "", &err) else {
+        guard let handle = MobileOpenDevice(dir.path, "", DeviceID.current, &err) else {
             report("Could not open the vault: \(err?.localizedDescription ?? "unknown error")")
             return
         }
