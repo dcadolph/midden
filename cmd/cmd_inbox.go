@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -134,6 +135,11 @@ func foldDevice(v *vault.Vault, device string) (int, error) {
 		if err != nil {
 			return folded, errors.Join(ErrVault, fmt.Errorf("read %s inbox %s: %w", device, day.Format(layoutDate), err))
 		}
+		existing, err := v.ReadDay(day)
+		if err != nil {
+			return folded, errors.Join(ErrVault, fmt.Errorf("read day %s: %w", day.Format(layoutDate), err))
+		}
+		entries = newEntries(existing, entries)
 		if len(entries) > 0 {
 			if err := v.AppendAll(entries); err != nil {
 				return folded, errors.Join(ErrVault, fmt.Errorf("fold %s %s: %w", device, day.Format(layoutDate), err))
@@ -146,7 +152,44 @@ func foldDevice(v *vault.Vault, device string) (int, error) {
 		}
 		folded += len(entries)
 	}
+	// A drained inbox leaves an empty directory behind. Devices that sync in
+	// batches create a fresh one each time, so leaving them would grow the
+	// vault without bound.
+	if err := box.RemoveIfEmpty(); err != nil {
+		return folded, errors.Join(ErrVault, fmt.Errorf("prune %s inbox: %w", device, err))
+	}
 	return folded, nil
+}
+
+// newEntries returns the candidates that the day does not already hold.
+//
+// Folding is content-idempotent so that an inbox file which reappears, whether
+// from a restored backup or a sync that resurrected an already-folded file,
+// cannot duplicate entries that were folded earlier. Entries match on
+// timestamp, tags, and body, which is everything a day file records.
+func newEntries(existing, candidates []vault.Entry) []vault.Entry {
+	if len(existing) == 0 {
+		return candidates
+	}
+	have := make(map[string]struct{}, len(existing))
+	for _, e := range existing {
+		have[entryKey(e)] = struct{}{}
+	}
+	out := make([]vault.Entry, 0, len(candidates))
+	for _, c := range candidates {
+		key := entryKey(c)
+		if _, seen := have[key]; seen {
+			continue
+		}
+		have[key] = struct{}{}
+		out = append(out, c)
+	}
+	return out
+}
+
+// entryKey returns a comparison key covering everything a day file stores.
+func entryKey(e vault.Entry) string {
+	return e.Time.Format(time.RFC3339) + "\x00" + strings.Join(e.Tags, ",") + "\x00" + strings.TrimSpace(e.Body)
 }
 
 // pendingInbox returns what each device inbox holds, ordered by device then date.

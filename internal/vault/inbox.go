@@ -68,6 +68,35 @@ func ValidDevice(name string) error {
 	return nil
 }
 
+// RemoveIfEmpty deletes this inbox directory when it holds no day files,
+// tolerating the lock file the vault itself creates. An inbox that still holds
+// entries is left alone and is not an error.
+func (v *Vault) RemoveIfEmpty() error {
+	days, err := v.ListDays()
+	if err != nil {
+		return err
+	}
+	if len(days) > 0 {
+		return nil
+	}
+	entries, err := os.ReadDir(v.Dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read inbox directory: %w", err)
+	}
+	for _, e := range entries {
+		if e.Name() != lockFile {
+			return nil
+		}
+	}
+	if err := os.RemoveAll(v.Dir); err != nil {
+		return fmt.Errorf("remove inbox directory: %w", err)
+	}
+	return nil
+}
+
 // DrainDay removes the day file for the given date and prunes the month and
 // year directories once they are empty, leaving the vault root in place.
 // It is called on an inbox after that day's entries reach the canonical vault.
