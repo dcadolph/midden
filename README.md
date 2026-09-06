@@ -406,6 +406,10 @@ The framework and the Xcode project are build products and are not tracked. Entr
 
 The phone does not write the canonical day files. It appends to `inbox/<device>/`, which carries the same layout and encryption, so two devices journaling on the same day never write the same file and a merge cannot conflict. The phone's reads cover the canonical files and its own inbox together, so an entry it has not yet handed over is still visible there. On the desktop, `midden inbox fold` merges those entries into the day files and empties the inbox; a fold that is interrupted leaves the inbox intact so a rerun finishes the job rather than losing entries.
 
+The app syncs the vault as a git repository. Point the Sync tab at a private repo and paste an access token, which is kept in the device keychain rather than in the journal, and the app commits and exchanges entries after every save and whenever it returns to the foreground. Capture works fully offline and with sync unconfigured; unsent entries simply wait.
+
+Reconciliation never merges file contents. When both sides have moved, the app takes the remote wholesale and replays its own inbox on top, which is safe because nothing else writes those files. A capture the desktop has already folded away is not restored, because the replay skips files that were present the last time the two histories agreed and are gone now. Folding is also content-idempotent, so an inbox file that reappears cannot duplicate entries.
+
 Set `DEVELOPMENT_TEAM` in `project.yml` to your own team before building for a device, and sign in to that Apple ID in Xcode so automatic signing can issue a profile. Running on your own phone needs nothing further; TestFlight additionally needs an App Store Connect record for the bundle identifier.
 
 </details>

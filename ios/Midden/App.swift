@@ -18,6 +18,8 @@ struct MiddenApp: App {
 struct RootView: View {
     /// store supplies entries and accepts new ones.
     @EnvironmentObject private var store: VaultStore
+    /// scenePhase drives a sync when the app returns to the foreground.
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         TabView {
@@ -27,6 +29,15 @@ struct RootView: View {
                 .tabItem { Label("Today", systemImage: "text.book.closed") }
             WeekView()
                 .tabItem { Label("Week", systemImage: "calendar") }
+            SyncView()
+                .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Coming back to the app is the moment another device's entries are
+            // most likely waiting, so pull them in then.
+            if phase == .active {
+                Task { await store.sync() }
+            }
         }
         .alert("Vault error", isPresented: $store.showingError, presenting: store.errorMessage) { _ in
             Button("OK", role: .cancel) {}

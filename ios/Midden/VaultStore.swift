@@ -17,6 +17,10 @@ final class VaultStore: ObservableObject {
     @Published var errorMessage: String?
     /// showingError drives the alert presentation.
     @Published var showingError = false
+    /// syncStatus describes the outcome of the most recent sync attempt.
+    @Published private(set) var syncStatus = ""
+    /// isSyncing reports whether a sync is currently running.
+    @Published private(set) var isSyncing = false
 
     /// vault is the Go handle, nil when the vault could not be opened.
     private var vault: MobileVault?
@@ -65,6 +69,34 @@ final class VaultStore: ObservableObject {
             refresh()
         } catch {
             report("Could not save the entry: \(error.localizedDescription)")
+            return
+        }
+        // The entry is already safe on disk, so a sync failure here is worth
+        // reporting but never worth losing the capture over.
+        Task { await sync() }
+    }
+
+    /// sync hands this device's captures to the remote and takes back whatever
+    /// the other devices have written.
+    ///
+    /// It runs off the main actor because the transfer is network-bound, and it
+    /// is a no-op when sync has not been configured, so capture works fully
+    /// offline and unconfigured.
+    func sync() async {
+        guard let vault, SyncSettings.isConfigured, !isSyncing else { return }
+        let remote = SyncSettings.remoteURL
+        let token = SyncSettings.token
+        let branch = SyncSettings.branch
+        isSyncing = true
+        defer { isSyncing = false }
+        do {
+            let summary = try await Task.detached {
+                try bridged { vault.sync(remote, token: token, branch: branch, error: $0) }
+            }.value
+            syncStatus = summary
+            refresh()
+        } catch {
+            syncStatus = "Sync failed: \(error.localizedDescription)"
         }
     }
 
@@ -88,19 +120,6 @@ final class VaultStore: ObservableObject {
         }
     }
 
-    /// bridged calls a core method that reports failure through an error pointer
-    /// and rethrows it as a Swift error. Methods returning a non-optional string
-    /// cannot be imported as throwing, so the pointer is threaded here instead of
-    /// at every call site.
-    private func bridged(_ call: (NSErrorPointer) -> String) throws -> String {
-        var err: NSError?
-        let result = call(&err)
-        if let err {
-            throw err
-        }
-        return result
-    }
-
     /// report surfaces a failure to the user without throwing out of a view action.
     private func report(_ message: String) {
         errorMessage = message
@@ -113,4 +132,19 @@ final class VaultStore: ObservableObject {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+}
+
+/// bridged calls a core method that reports failure through an error pointer and
+/// rethrows it as a Swift error.
+///
+/// Methods returning a non-optional string cannot be imported as throwing, so the
+/// pointer is threaded here rather than at every call site. It is a free function
+/// so work running off the main actor can use it too.
+func bridged(_ call: (NSErrorPointer) -> String) throws -> String {
+    var err: NSError?
+    let result = call(&err)
+    if let err {
+        throw err
+    }
+    return result
 }
