@@ -410,7 +410,7 @@ The app syncs the vault as a git repository. Point the Sync tab at a private rep
 
 Reconciliation never merges file contents. When both sides have moved, the app takes the remote wholesale and replays its own inbox on top, which is safe because nothing else writes those files. A capture the desktop has already folded away is not restored, because the replay skips files that were present the last time the two histories agreed and are gone now. Folding is also content-idempotent, so an inbox file that reappears cannot duplicate entries.
 
-Set `DEVELOPMENT_TEAM` in `project.yml` to your own team before building for a device, and sign in to that Apple ID in Xcode so automatic signing can issue a profile. Running on your own phone needs nothing further; TestFlight additionally needs an App Store Connect record for the bundle identifier.
+Building for a device needs your own Apple developer team: set `MIDDEN_DEV_TEAM` before generating the project (`MIDDEN_DEV_TEAM=XXXXXXXXXX xcodegen generate`) and sign in to that Apple ID in Xcode so automatic signing can issue a profile. Simulator builds need neither. Running on your own phone needs nothing further; TestFlight additionally needs an App Store Connect record for the bundle identifier.
 
 </details>
 

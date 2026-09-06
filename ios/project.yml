@@ -10,7 +10,9 @@ settings:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
-    DEVELOPMENT_TEAM: D29KQ8475X
+    # Set MIDDEN_DEV_TEAM to your Apple developer team before generating the
+    # project. Simulator builds do not need it.
+    DEVELOPMENT_TEAM: ${MIDDEN_DEV_TEAM}
     CODE_SIGN_STYLE: Automatic
 
 targets:
