@@ -30,8 +30,7 @@ struct LogEntryIntent: AppIntent {
         guard !body.isEmpty else {
             throw AppIntentError.entryWasEmpty
         }
-        let dir = VaultStore.vaultDirectory
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dir = await VaultLocation.resolve().url
         var err: NSError?
         guard let vault = MobileOpenDevice(dir.path, "", DeviceID.current, &err) else {
             throw AppIntentError.vaultUnavailable(err?.localizedDescription ?? "unknown error")

@@ -21,37 +21,42 @@ final class VaultStore: ObservableObject {
     @Published private(set) var syncStatus = ""
     /// isSyncing reports whether a sync is currently running.
     @Published private(set) var isSyncing = false
+    /// isCloudBacked reports whether the journal lives in iCloud Drive.
+    @Published private(set) var isCloudBacked = false
+    /// isReady reports whether the journal has been located and opened.
+    @Published private(set) var isReady = false
 
     /// vault is the Go handle, nil when the vault could not be opened.
     private var vault: MobileVault?
 
     init() {
-        openVault()
+        Task { await start() }
+    }
+
+    /// start locates the journal, opens it, and loads the first screen.
+    ///
+    /// Locating it can take a moment on a device the first time iCloud is
+    /// consulted, so it happens off the main actor and the screens show their
+    /// loading state until it lands.
+    private func start() async {
+        let place = await VaultLocation.resolve()
+        isCloudBacked = place.isCloud
+        open(at: place.url)
+        isReady = true
         refresh()
-    }
-
-    /// vaultDirectory returns the on-device journal location.
-    /// Documents keeps the vault visible to the Files app and included in
-    /// device backups. Git sync will clone into this same directory.
-    /// It is not actor-isolated so the App Intent can reach the vault without
-    /// hopping to the main actor.
-    nonisolated static var vaultDirectory: URL {
-        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("midden", isDirectory: true)
-    }
-
-    /// openVault creates the journal directory if needed and opens the core handle.
-    private func openVault() {
-        let dir = VaultStore.vaultDirectory
-        do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        } catch {
-            report("Could not create the journal directory: \(error.localizedDescription)")
-            return
+        if place.isCloud {
+            // Ask iCloud for anything it is holding as a placeholder, then show
+            // whatever arrived. The core reads files directly and cannot fault
+            // a stub in on its own.
+            Task.detached(priority: .utility) { VaultLocation.warmUp(place.url) }
         }
+    }
+
+    /// open attaches the core handle to the journal directory.
+    private func open(at dir: URL) {
         var err: NSError?
         guard let handle = MobileOpenDevice(dir.path, "", DeviceID.current, &err) else {
-            report("Could not open the vault: \(err?.localizedDescription ?? "unknown error")")
+            report("Could not open the journal: \(err?.localizedDescription ?? "unknown error")")
             return
         }
         vault = handle

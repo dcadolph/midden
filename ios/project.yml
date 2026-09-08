@@ -25,6 +25,8 @@ targets:
       - framework: Frameworks/MiddenCore.xcframework
         embed: true
         codeSign: true
+    entitlements:
+      path: Midden/Midden.entitlements
     settings:
       base:
         # A bundle identifier belongs to exactly one Apple team forever, and a
@@ -33,10 +35,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.dcadolph.middenjournal
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        GENERATE_INFOPLIST_FILE: true
-        INFOPLIST_KEY_CFBundleDisplayName: Midden
-        INFOPLIST_KEY_UILaunchScreen_Generation: true
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: Midden records your voice so a spoken entry can be transcribed into your journal.
-        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Midden transcribes your speech on this device so you can journal without typing.
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        # A generated Info.plist cannot express the nested NSUbiquitousContainers
+        # dictionary that publishes the journal to the Files app, so the file is
+        # written out and checked in.
+        GENERATE_INFOPLIST_FILE: false
+        INFOPLIST_FILE: Midden/Info.plist
         TARGETED_DEVICE_FAMILY: "1,2"
