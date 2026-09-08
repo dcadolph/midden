@@ -24,119 +24,119 @@ var reportTemplate = template.Must(template.ParseFS(templatesFS, "templates/repo
 // CalendarCell is one square in the heatmap.
 type CalendarCell struct {
 	// Date is the YYYY-MM-DD label shown in the cell tooltip.
-	Date string
+	Date string `json:"date"`
 	// Count is the number of entries on this date.
-	Count int
+	Count int `json:"count"`
 	// Class is the CSS class applied to color the cell.
-	Class string
+	Class string `json:"class"`
 }
 
 // TagBar is a single row in the tag histogram with the bar already sized.
 type TagBar struct {
 	// Tag is the tag label.
-	Tag string
+	Tag string `json:"tag"`
 	// Count is the entry count.
-	Count int
+	Count int `json:"count"`
 	// Width is the percentage width of the bar from zero to one hundred.
-	Width int
+	Width int `json:"width"`
 }
 
 // DayRow is a single row in the days table.
 type DayRow struct {
 	// Date is the YYYY-MM-DD date.
-	Date string
+	Date string `json:"date"`
 	// Entries is the entry count on the date.
-	Entries int
+	Entries int `json:"entries"`
 	// Words is the total whitespace-separated word count on the date.
-	Words int
+	Words int `json:"words"`
 }
 
 // EraRow is one chapter of the record with its bar pre-sized.
 type EraRow struct {
 	// Span is the era's month range.
-	Span string
+	Span string `json:"span"`
 	// Months is the era's length.
-	Months int
+	Months int `json:"months"`
 	// Entries is the entry count inside it.
-	Entries int
+	Entries int `json:"entries"`
 	// PerMonth is the average monthly volume, pre-formatted.
-	PerMonth string
+	PerMonth string `json:"per_month"`
 	// Width is the bar width percentage, scaled by log volume.
-	Width int
+	Width int `json:"width"`
 }
 
 // ThreadRow is one recurring commitment.
 type ThreadRow struct {
 	// Label is the thread's display title.
-	Label string
+	Label string `json:"label"`
 	// Count is how many occurrences it holds.
-	Count int
+	Count int `json:"count"`
 	// Span describes how long it ran.
-	Span string
+	Span string `json:"span"`
 	// Detail carries the status-specific tail: when it ended, its cadence, or
 	// how long it has been quiet.
-	Detail string
+	Detail string `json:"detail"`
 }
 
 // SilenceRow is one stretch where the record went quiet.
 type SilenceRow struct {
 	// Span is the silence's month range.
-	Span string
+	Span string `json:"span"`
 	// Months is its length.
-	Months int
+	Months int `json:"months"`
 	// Scope names the source that fell silent, or the whole record.
-	Scope string
+	Scope string `json:"scope"`
 	// Detail carries the before and after rates.
-	Detail string
+	Detail string `json:"detail"`
 }
 
 // PersonRow is one person the record names.
 type PersonRow struct {
 	// Name is the most common spelling.
-	Name string
+	Name string `json:"name"`
 	// Mentions is how many entries name them.
-	Mentions int
+	Mentions int `json:"mentions"`
 	// Span describes how long they have been in the record.
-	Span string
+	Span string `json:"span"`
 	// LastSeen is set only for names that recurred and then faded.
-	LastSeen string
+	LastSeen string `json:"last_seen"`
 }
 
 // HandoffRow is one succession between threads.
 type HandoffRow struct {
 	// From and To are the thread labels.
-	From string
-	To   string
+	From string `json:"from"`
+	To   string `json:"to"`
 	// Detail carries the dates and the gap.
-	Detail string
+	Detail string `json:"detail"`
 }
 
 // Data is the template view model for the report.
 type Data struct {
 	// Title appears in the document title.
-	Title string
+	Title string `json:"title"`
 	// Stats is the precomputed vault summary.
-	Stats vault.Stats
+	Stats vault.Stats `json:"stats"`
 	// Streak is the consecutive-days streak ending today.
-	Streak int
+	Streak int `json:"streak"`
 	// Calendar holds one CalendarCell per day in the heatmap window.
-	Calendar []CalendarCell
+	Calendar []CalendarCell `json:"calendar"`
 	// Tags holds the top tag bars.
-	Tags []TagBar
+	Tags []TagBar `json:"tags"`
 	// Days holds one row per day with entries on it.
-	Days []DayRow
+	Days []DayRow `json:"days"`
 	// Eras holds the record's chapters.
-	Eras []EraRow
+	Eras []EraRow `json:"eras"`
 	// Ended, Dormant, and Ongoing hold the weave threads by status.
-	Ended   []ThreadRow
-	Dormant []ThreadRow
-	Ongoing []ThreadRow
+	Ended   []ThreadRow `json:"ended"`
+	Dormant []ThreadRow `json:"dormant"`
+	Ongoing []ThreadRow `json:"ongoing"`
 	// Silences holds the stretches where the record went quiet.
-	Silences []SilenceRow
+	Silences []SilenceRow `json:"silences"`
 	// People holds the names the record keeps mentioning.
-	People []PersonRow
+	People []PersonRow `json:"people"`
 	// Handoffs holds successions between threads.
-	Handoffs []HandoffRow
+	Handoffs []HandoffRow `json:"handoffs"`
 }
 
 // Render writes the HTML report to w using the supplied template data.
@@ -367,9 +367,9 @@ func silenceLabel(days int) string {
 // dayMetric pairs entry count and word count for a single day.
 type dayMetric struct {
 	// Entries is the entry count on the day.
-	Entries int
+	Entries int `json:"entries"`
 	// Words is the whitespace-separated word count on the day.
-	Words int
+	Words int `json:"words"`
 }
 
 // buildCalendar emits a GitHub-style heatmap covering the year ending at now.

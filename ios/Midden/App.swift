@@ -31,8 +31,8 @@ struct RootView: View {
                 .tabItem { Label("Week", systemImage: "calendar") }
             BrowseView()
                 .tabItem { Label("Browse", systemImage: "magnifyingglass") }
-            SyncView()
-                .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
+            LifeView()
+                .tabItem { Label("Record", systemImage: "chart.bar.doc.horizontal") }
         }
         .onChange(of: scenePhase) { _, phase in
             // Coming back to the app is the moment another device's entries are

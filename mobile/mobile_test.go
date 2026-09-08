@@ -310,3 +310,49 @@ func mustCall(t *testing.T, call func() (string, error)) string {
 	}
 	return data
 }
+
+func TestInsightsJSONDescribesTheRecord(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	v, err := Open(dir, "")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	// A short run of days so the heatmap, totals, and tags have something real.
+	for day := 1; day <= 5; day++ {
+		stamp := fmt.Sprintf("2026-09-%02dT09:00:00", day)
+		if err := v.AppendAt(stamp, "garden", "Worked in the garden."); err != nil {
+			t.Fatalf("append %s: %v", stamp, err)
+		}
+	}
+	raw, err := v.InsightsJSON(10)
+	if err != nil {
+		t.Fatalf("InsightsJSON: %v", err)
+	}
+	var got struct {
+		Stats struct {
+			Entries int `json:"entries"`
+			Days    int `json:"days"`
+		} `json:"stats"`
+		Calendar []struct {
+			Date  string `json:"date"`
+			Count int    `json:"count"`
+		} `json:"calendar"`
+		Tags []struct {
+			Tag   string `json:"tag"`
+			Count int    `json:"count"`
+		} `json:"tags"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("unmarshal insights: %v\n%s", err, raw)
+	}
+	if got.Stats.Entries != 5 || got.Stats.Days != 5 {
+		t.Errorf("stats = %d entries over %d days, want 5 and 5", got.Stats.Entries, got.Stats.Days)
+	}
+	if len(got.Calendar) == 0 {
+		t.Error("calendar is empty; the heatmap would render blank")
+	}
+	if len(got.Tags) != 1 || got.Tags[0].Tag != "garden" || got.Tags[0].Count != 5 {
+		t.Errorf("tags = %+v, want garden counted five times", got.Tags)
+	}
+}

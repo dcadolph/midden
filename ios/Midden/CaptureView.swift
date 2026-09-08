@@ -14,6 +14,8 @@ struct CaptureView: View {
     @State private var savedAt: Date?
     /// suggestions are the tags used most often, offered as one-tap chips.
     @State private var suggestions: [TagCount] = []
+    /// showingSync presents the sync settings sheet.
+    @State private var showingSync = false
 
     var body: some View {
         NavigationStack {
@@ -61,6 +63,20 @@ struct CaptureView: View {
             }
             .padding()
             .navigationTitle("Capture")
+            .toolbar {
+                // Sync is configuration rather than a place to visit, so it
+                // sits behind a control instead of spending a tab.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingSync = true
+                    } label: {
+                        Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingSync) {
+                SyncView()
+            }
             .onChange(of: dictation.transcript) { _, transcript in
                 if !transcript.isEmpty {
                     draft = transcript
