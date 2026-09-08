@@ -27,7 +27,10 @@ targets:
         codeSign: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.dcadolph.midden
+        # A bundle identifier belongs to exactly one Apple team forever, and a
+        # free-provisioning install claims it permanently, so the identifier a
+        # device build used cannot later be moved to a paid team.
+        PRODUCT_BUNDLE_IDENTIFIER: com.dcadolph.middenjournal
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: true
