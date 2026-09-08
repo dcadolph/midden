@@ -176,6 +176,58 @@ func (m *Vault) SearchJSON(query string) (string, error) {
 	return entriesJSON(sortByTime(entries))
 }
 
+// TagsJSON returns the tags in use with their entry counts as a JSON array of
+// {tag, count}, ordered by descending count then label. A non-positive limit
+// returns every tag.
+//
+// Counts cover this device's unsynced captures as well, so a tag that so far
+// exists only in a pending entry still offers itself for browsing.
+func (m *Vault) TagsJSON(limit int) (string, error) {
+	totals := map[string]int{}
+	sources := []*vault.Vault{m.v}
+	if m.inbox != nil {
+		sources = append(sources, m.inbox)
+	}
+	for _, src := range sources {
+		counts, err := src.TagCounts(0)
+		if err != nil {
+			return "", fmt.Errorf("tag counts: %w", err)
+		}
+		for _, c := range counts {
+			totals[c.Tag] += c.Count
+		}
+	}
+	data, err := json.Marshal(util.SortedCounts(totals, limit))
+	if err != nil {
+		return "", fmt.Errorf("marshal tags: %w", err)
+	}
+	return string(data), nil
+}
+
+// TaggedJSON returns every entry carrying the given tag as a JSON array.
+func (m *Vault) TaggedJSON(tag string) (string, error) {
+	entries, err := m.merged(func(v *vault.Vault) ([]vault.Entry, error) { return v.WithTag(tag) })
+	if err != nil {
+		return "", fmt.Errorf("read tag %s: %w", tag, err)
+	}
+	return entriesJSON(sortByTime(entries))
+}
+
+// FlashbackJSON returns entries from past years that fall on the given month
+// and day, as a JSON array. month is 1 through 12.
+func (m *Vault) FlashbackJSON(month, day int) (string, error) {
+	if month < 1 || month > 12 || day < 1 || day > 31 {
+		return "", fmt.Errorf("invalid month %d or day %d", month, day)
+	}
+	entries, err := m.merged(func(v *vault.Vault) ([]vault.Entry, error) {
+		return v.Flashback(time.Month(month), day)
+	})
+	if err != nil {
+		return "", fmt.Errorf("flashback: %w", err)
+	}
+	return entriesJSON(sortByTime(entries))
+}
+
 // merged runs read against the canonical vault and this device's inbox and
 // returns the combined entries, so unsynced local captures are never missing
 // from what the device displays.

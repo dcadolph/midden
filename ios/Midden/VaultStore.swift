@@ -120,6 +120,45 @@ final class VaultStore: ObservableObject {
         }
     }
 
+    /// search returns entries whose text matches the query.
+    /// An empty or failing query yields no results rather than an error alert,
+    /// since searching is exploratory and a dead end is not a fault.
+    func search(_ query: String) -> [Entry] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let vault, !trimmed.isEmpty else { return [] }
+        return (try? Entry.decodeList(bridged { vault.searchJSON(trimmed, error: $0) })) ?? []
+    }
+
+    /// entries returns every entry carrying the given tag.
+    func entries(tagged tag: String) -> [Entry] {
+        guard let vault, !tag.isEmpty else { return [] }
+        return (try? Entry.decodeList(bridged { vault.taggedJSON(tag, error: $0) })) ?? []
+    }
+
+    /// flashback returns entries from past years sharing today's calendar date.
+    func flashback() -> [Entry] {
+        guard let vault else { return [] }
+        let parts = Calendar.current.dateComponents([.month, .day], from: Date())
+        guard let month = parts.month, let day = parts.day else { return [] }
+        let entries = (try? Entry.decodeList(bridged {
+            vault.flashbackJSON(month, day: day, error: $0)
+        })) ?? []
+        // Today's own entries are not a flashback.
+        let today = Calendar.current.startOfDay(for: Date())
+        return entries.filter { Calendar.current.startOfDay(for: $0.time) != today }
+    }
+
+    /// tagCounts returns the tags in use with their entry counts, most used first.
+    func tagCounts(limit: Int) -> [TagCount] {
+        guard let vault else { return [] }
+        guard let json = try? bridged({ vault.tagsJSON(limit, error: $0) }),
+              let data = json.data(using: .utf8),
+              let counts = try? JSONDecoder().decode([TagCount].self, from: data) else {
+            return []
+        }
+        return counts
+    }
+
     /// report surfaces a failure to the user without throwing out of a view action.
     private func report(_ message: String) {
         errorMessage = message

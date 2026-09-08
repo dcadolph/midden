@@ -12,6 +12,8 @@ struct CaptureView: View {
     @State private var tags = ""
     /// savedAt marks the last successful save so the view can confirm it.
     @State private var savedAt: Date?
+    /// suggestions are the tags used most often, offered as one-tap chips.
+    @State private var suggestions: [TagCount] = []
 
     var body: some View {
         NavigationStack {
@@ -33,6 +35,8 @@ struct CaptureView: View {
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+
+                recentTags
 
                 recordButton
 
@@ -62,7 +66,47 @@ struct CaptureView: View {
                     draft = transcript
                 }
             }
+            .onAppear { suggestions = store.tagCounts(limit: 12) }
         }
+    }
+
+    /// recentTags offers the most used tags as chips.
+    ///
+    /// Tagging at capture time is what makes a question like "the vacation
+    /// entries" answerable later by plain retrieval, so it has to cost one tap
+    /// rather than a spelling.
+    private var recentTags: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(suggestions) { suggestion in
+                    TagChip(tag: suggestion.tag,
+                            isSelected: selected.contains(suggestion.tag)) {
+                        toggle(tag: suggestion.tag)
+                    }
+                }
+            }
+        }
+        .frame(height: suggestions.isEmpty ? 0 : 48)
+    }
+
+    /// selected is the set of tags currently in the tag field.
+    private var selected: Set<String> {
+        Set(tags.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .filter { !$0.isEmpty })
+    }
+
+    /// toggle adds or removes a tag from the comma-separated field.
+    private func toggle(tag: String) {
+        var current = tags.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        if let index = current.firstIndex(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+            current.remove(at: index)
+        } else {
+            current.append(tag)
+        }
+        tags = current.joined(separator: ", ")
     }
 
     /// recordButton starts and stops dictation.
