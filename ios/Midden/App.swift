@@ -29,6 +29,8 @@ struct RootView: View {
                 .tabItem { Label("Today", systemImage: "text.book.closed") }
             WeekView()
                 .tabItem { Label("Week", systemImage: "calendar") }
+            BrowseView()
+                .tabItem { Label("Browse", systemImage: "magnifyingglass") }
             SyncView()
                 .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
         }

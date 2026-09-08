@@ -230,3 +230,83 @@ func mustRange(t *testing.T, v *Vault, from, to string) string {
 	}
 	return data
 }
+
+func TestRetrievalCoversInboxAndCanonical(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	desk, err := Open(dir, "")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	phone, err := OpenDevice(dir, "", "iphone")
+	if err != nil {
+		t.Fatalf("OpenDevice: %v", err)
+	}
+	if err := desk.AppendAt("2024-07-04T09:00:00", "vacation,greece", "Ferry to the island."); err != nil {
+		t.Fatalf("desk append: %v", err)
+	}
+	if err := desk.AppendAt("2026-07-04T09:00:00", "vacation", "Same date, later year."); err != nil {
+		t.Fatalf("desk append: %v", err)
+	}
+	if err := phone.AppendAt("2026-09-05T09:00:00", "vacation", "Pending capture, still tagged."); err != nil {
+		t.Fatalf("phone append: %v", err)
+	}
+
+	// Tag counts must sum across the canonical vault and the pending inbox.
+	tagsJSON, err := phone.TagsJSON(0)
+	if err != nil {
+		t.Fatalf("TagsJSON: %v", err)
+	}
+	var tags []struct {
+		Tag   string `json:"tag"`
+		Count int    `json:"count"`
+	}
+	if err := json.Unmarshal([]byte(tagsJSON), &tags); err != nil {
+		t.Fatalf("unmarshal tags: %v", err)
+	}
+	got := map[string]int{}
+	for _, tc := range tags {
+		got[tc.Tag] = tc.Count
+	}
+	if got["vacation"] != 3 {
+		t.Errorf("vacation count = %d, want 3 (two canonical plus one pending): %s", got["vacation"], tagsJSON)
+	}
+	if got["greece"] != 1 {
+		t.Errorf("greece count = %d, want 1", got["greece"])
+	}
+	if len(tags) > 0 && tags[0].Tag != "vacation" {
+		t.Errorf("tags[0] = %q, want the most used tag first", tags[0].Tag)
+	}
+
+	// Browsing a tag must reach the pending capture too.
+	tagged := decodeEntries(t, mustCall(t, func() (string, error) { return phone.TaggedJSON("vacation") }))
+	if len(tagged) != 3 {
+		t.Errorf("tagged returned %d entries, want 3", len(tagged))
+	}
+	// A leading hash is how tags are written in a day file, so accept it.
+	if hashed := decodeEntries(t, mustCall(t, func() (string, error) { return phone.TaggedJSON("#vacation") })); len(hashed) != 3 {
+		t.Errorf("tagged with a leading hash returned %d entries, want 3", len(hashed))
+	}
+
+	// Flashback finds the same calendar day in an earlier year.
+	back := decodeEntries(t, mustCall(t, func() (string, error) { return phone.FlashbackJSON(7, 4) }))
+	if len(back) != 2 {
+		t.Errorf("flashback returned %d entries, want both July 4ths", len(back))
+	}
+	if _, err := phone.FlashbackJSON(13, 1); err == nil {
+		t.Error("FlashbackJSON accepted month 13")
+	}
+	if _, err := phone.FlashbackJSON(7, 0); err == nil {
+		t.Error("FlashbackJSON accepted day 0")
+	}
+}
+
+// mustCall runs a binding that returns JSON and fails the test on error.
+func mustCall(t *testing.T, call func() (string, error)) string {
+	t.Helper()
+	data, err := call()
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	return data
+}
