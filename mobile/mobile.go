@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dcadolph/midden/internal/report"
 	"github.com/dcadolph/midden/internal/util"
 	"github.com/dcadolph/midden/internal/vault"
 )
@@ -302,4 +303,26 @@ func parseDate(date string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("parse date %q: want YYYY-MM-DD: %w", date, err)
 	}
 	return day, nil
+}
+
+// InsightsJSON returns the computed shape of the whole record as JSON: totals,
+// a day-by-day heatmap, the eras the record falls into, recurring threads, the
+// stretches that went quiet, the people it names, and the top tags.
+//
+// This is the same analysis the desktop HTML report renders, so a phone and a
+// laptop describe a life the same way. topTags caps the tag histogram.
+//
+// It reads the canonical vault only. Captures still waiting to sync are absent,
+// which matters not at all at the scale this describes and keeps a years-long
+// analysis off the write path.
+func (m *Vault) InsightsJSON(topTags int) (string, error) {
+	data, err := report.Build("midden", m.v, time.Now(), topTags)
+	if err != nil {
+		return "", fmt.Errorf("build insights: %w", err)
+	}
+	out, err := json.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf("marshal insights: %w", err)
+	}
+	return string(out), nil
 }

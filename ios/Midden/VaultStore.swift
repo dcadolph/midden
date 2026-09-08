@@ -148,6 +148,26 @@ final class VaultStore: ObservableObject {
         return entries.filter { Calendar.current.startOfDay(for: $0.time) != today }
     }
 
+    /// insights computes the shape of the whole record.
+    ///
+    /// The analysis walks every day file, so it runs off the main actor and is
+    /// requested rather than kept fresh on every write.
+    func insights() async -> Insights {
+        guard let vault else { return .empty }
+        do {
+            let json = try await Task.detached {
+                try bridged { vault.insightsJSON(24, error: $0) }
+            }.value
+            guard let data = json.data(using: .utf8) else { return .empty }
+            return try JSONDecoder().decode(Insights.self, from: data)
+        } catch {
+            // A record that fails to summarize is worth saying out loud rather
+            // than showing as an empty one, which reads as "you wrote nothing".
+            report("Could not read your record: \(error.localizedDescription)")
+            return .empty
+        }
+    }
+
     /// tagCounts returns the tags in use with their entry counts, most used first.
     func tagCounts(limit: Int) -> [TagCount] {
         guard let vault else { return [] }
