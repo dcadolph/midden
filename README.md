@@ -7,7 +7,7 @@
 [![Go](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-A personal journal kept as plain markdown. Append timestamped entries from the terminal or through a Claude Code skill. Search across years with grep, semantic recall, or by asking questions in plain language.
+A personal journal kept as plain markdown. Append timestamped entries from the terminal, the iPhone app, or a Claude Code skill. Search across years with grep, semantic recall, or by asking questions in plain language.
 
 What is a [midden](https://en.wikipedia.org/wiki/Midden)?
 
